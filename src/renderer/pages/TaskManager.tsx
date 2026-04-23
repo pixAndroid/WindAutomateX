@@ -9,6 +9,8 @@ const TaskManager: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  // Maps taskId -> runId for currently running tasks
+  const [runningTasks, setRunningTasks] = useState<Map<number, number>>(new Map());
 
   const load = async () => {
     const all = await window.electronAPI.tasks.list();
@@ -16,6 +18,20 @@ const TaskManager: React.FC = () => {
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    window.electronAPI.onRunUpdate((_event, run) => {
+      setRunningTasks((prev) => {
+        const next = new Map(prev);
+        if (run.status === 'running') {
+          next.set(run.task_id, run.id);
+        } else {
+          next.delete(run.task_id);
+        }
+        return next;
+      });
+    });
+  }, []);
 
   const filtered = tasks.filter((t) => {
     const matchSearch = t.name.toLowerCase().includes(search.toLowerCase());
@@ -32,6 +48,15 @@ const TaskManager: React.FC = () => {
       showToast('Task started', 'success');
     } catch {
       showToast('Failed to start task', 'error');
+    }
+  };
+
+  const handleStop = async (runId: number) => {
+    try {
+      await window.electronAPI.task.stop(runId);
+      showToast('Task stopped', 'info');
+    } catch {
+      showToast('Failed to stop task', 'error');
     }
   };
 
@@ -129,7 +154,11 @@ const TaskManager: React.FC = () => {
                 <td className="p-4 text-gray-400">{new Date(task.updated_at).toLocaleDateString()}</td>
                 <td className="p-4">
                   <div className="flex gap-2">
-                    <button onClick={() => handleRun(task.id)} title="Run" className="text-green-400 hover:text-green-300 text-lg">▶</button>
+                    {runningTasks.has(task.id) ? (
+                      <button onClick={() => handleStop(runningTasks.get(task.id)!)} title="Stop" className="text-red-500 hover:text-red-400 text-lg">⏹</button>
+                    ) : (
+                      <button onClick={() => handleRun(task.id)} title="Run" className="text-green-400 hover:text-green-300 text-lg">▶</button>
+                    )}
                     <button onClick={() => navigate(`/tasks/${task.id}/edit`)} title="Edit" className="text-blue-400 hover:text-blue-300">✏️</button>
                     <button onClick={() => handleDuplicate(task)} title="Duplicate" className="text-yellow-400 hover:text-yellow-300">📋</button>
                     <button onClick={() => handleToggle(task)} title={task.enabled ? 'Disable' : 'Enable'} className="text-gray-400 hover:text-white">

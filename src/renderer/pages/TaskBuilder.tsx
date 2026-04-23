@@ -51,6 +51,8 @@ const TaskBuilder: React.FC = () => {
   const [editingStep, setEditingStep] = useState<EditingStep | null>(null);
   const [showJson, setShowJson] = useState(false);
   const [selectedStepType, setSelectedStepType] = useState<StepType>('launch_exe');
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (isEdit && id) {
@@ -104,6 +106,36 @@ const TaskBuilder: React.FC = () => {
 
   const handleDeleteStep = (index: number) => {
     setSteps((prev) => prev.filter((_, i) => i !== index).map((s, i) => ({ ...s, step_order: i })));
+  };
+
+  const handleDragStart = (index: number) => {
+    setDragIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDragOverIndex(index);
+  };
+
+  const handleDrop = (dropIndex: number) => {
+    if (dragIndex === null || dragIndex === dropIndex) {
+      setDragIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    setSteps((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(dragIndex, 1);
+      next.splice(dropIndex, 0, moved);
+      return next.map((s, i) => ({ ...s, step_order: i }));
+    });
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setDragOverIndex(null);
   };
 
   const handleMoveUp = (index: number) => {
@@ -212,10 +244,16 @@ const TaskBuilder: React.FC = () => {
                 step={step}
                 index={i}
                 total={steps.length}
+                isDragging={dragIndex === i}
+                isDragOver={dragOverIndex === i && dragIndex !== i}
                 onEdit={() => handleEditStep(i)}
                 onDelete={() => handleDeleteStep(i)}
                 onMoveUp={() => handleMoveUp(i)}
                 onMoveDown={() => handleMoveDown(i)}
+                onDragStart={() => handleDragStart(i)}
+                onDragOver={(e) => handleDragOver(e, i)}
+                onDrop={() => handleDrop(i)}
+                onDragEnd={handleDragEnd}
               />
             ))}
           </div>
