@@ -51,6 +51,7 @@ interface StepCardProps {
   isDragOver?: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onCopy: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onDragStart: () => void;
@@ -59,7 +60,7 @@ interface StepCardProps {
   onDragEnd: () => void;
 }
 
-const StepCard: React.FC<StepCardProps> = ({ step, index, total, isDragging, isDragOver, onEdit, onDelete, onMoveUp, onMoveDown, onDragStart, onDragOver, onDrop, onDragEnd }) => {
+const StepCard: React.FC<StepCardProps> = ({ step, index, total, isDragging, isDragOver, onEdit, onDelete, onCopy, onMoveUp, onMoveDown, onDragStart, onDragOver, onDrop, onDragEnd }) => {
   let configSummary = '';
   try {
     const config = JSON.parse(step.config_json);
@@ -113,6 +114,13 @@ const StepCard: React.FC<StepCardProps> = ({ step, index, total, isDragging, isD
           title="Edit"
         >
           ✏️
+        </button>
+        <button
+          onClick={onCopy}
+          className="p-1 text-green-400 hover:text-green-300"
+          title="Copy Step"
+        >
+          📋
         </button>
         <button
           onClick={onDelete}
