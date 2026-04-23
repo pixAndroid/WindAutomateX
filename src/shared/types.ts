@@ -76,6 +76,7 @@ export interface ElectronAPI {
   runs: {
     list: (taskId?: number) => Promise<Run[]>;
     get: (id: number) => Promise<Run | undefined>;
+    clear: () => Promise<void>;
   };
   credentials: {
     list: () => Promise<Credential[]>;

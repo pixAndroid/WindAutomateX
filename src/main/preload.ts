@@ -16,6 +16,7 @@ const api: ElectronAPI = {
   runs: {
     list: (taskId) => ipcRenderer.invoke('runs:list', taskId),
     get: (id) => ipcRenderer.invoke('runs:get', id),
+    clear: () => ipcRenderer.invoke('runs:clear'),
   },
   credentials: {
     list: () => ipcRenderer.invoke('credentials:list'),

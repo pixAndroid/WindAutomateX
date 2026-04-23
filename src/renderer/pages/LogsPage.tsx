@@ -55,7 +55,7 @@ const LogsPage: React.FC = () => {
 
   const handleClear = async () => {
     if (!confirm('Clear all logs?')) return;
-    await (window.electronAPI as unknown as { runs: { clear: () => Promise<void> } }).runs.clear?.();
+    await window.electronAPI.runs.clear();
     showToast('Logs cleared', 'info');
     load();
   };
