@@ -58,7 +58,7 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
       const pickerPreload = path.join(__dirname, 'picker-preload.js');
 
       // Hide the main window so it doesn't obstruct coordinate picking
-      mainWindow.hide();
+      if (!mainWindow.isDestroyed()) mainWindow.hide();
 
       const pickerWin = new BrowserWindow({
         fullscreen: true,
@@ -107,7 +107,7 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
     mainWindow.webContents.send('run:update', run);
 
     // Minimize the main window so it doesn't interfere with automation clicks
-    mainWindow.minimize();
+    if (!mainWindow.isDestroyed()) mainWindow.minimize();
 
     const stepsJson = JSON.stringify(steps);
     const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
