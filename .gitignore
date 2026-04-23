@@ -1,0 +1,12 @@
+node_modules/
+dist/
+release/
+*.js.map
+.DS_Store
+*.db
+*.sqlite
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.local

@@ -1,0 +1,112 @@
+import React from 'react';
+import type { TaskStep, StepType } from '../../shared/types';
+
+const stepIcons: Record<StepType, string> = {
+  launch_exe: '🚀',
+  wait_window: '🪟',
+  click_element: '🖱️',
+  click_coordinate: '📍',
+  type_text: '⌨️',
+  press_key: '🔑',
+  select_dropdown: '📋',
+  upload_file: '📤',
+  download_file: '📥',
+  wait_download: '⏳',
+  wait_upload: '⏫',
+  read_text: '📖',
+  if_condition: '🔀',
+  loop: '🔁',
+  delay: '⏱️',
+  screenshot: '📸',
+  close_app: '❌',
+  kill_process: '💀',
+};
+
+const stepLabels: Record<StepType, string> = {
+  launch_exe: 'Launch EXE',
+  wait_window: 'Wait Window',
+  click_element: 'Click Element',
+  click_coordinate: 'Click Coordinate',
+  type_text: 'Type Text',
+  press_key: 'Press Key',
+  select_dropdown: 'Select Dropdown',
+  upload_file: 'Upload File',
+  download_file: 'Download File',
+  wait_download: 'Wait Download',
+  wait_upload: 'Wait Upload',
+  read_text: 'Read Text',
+  if_condition: 'If Condition',
+  loop: 'Loop',
+  delay: 'Delay',
+  screenshot: 'Screenshot',
+  close_app: 'Close App',
+  kill_process: 'Kill Process',
+};
+
+interface StepCardProps {
+  step: TaskStep;
+  index: number;
+  total: number;
+  onEdit: () => void;
+  onDelete: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+}
+
+const StepCard: React.FC<StepCardProps> = ({ step, index, total, onEdit, onDelete, onMoveUp, onMoveDown }) => {
+  let configSummary = '';
+  try {
+    const config = JSON.parse(step.config_json);
+    const entries = Object.entries(config).slice(0, 2);
+    configSummary = entries.map(([k, v]) => `${k}: ${String(v)}`).join(', ');
+  } catch {
+    configSummary = step.config_json;
+  }
+
+  return (
+    <div className="bg-gray-700 rounded-lg p-3 flex items-center gap-3 group">
+      <span className="text-gray-400 text-sm w-6 text-center">{index + 1}</span>
+      <span className="text-lg">{stepIcons[step.step_type]}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-white">{stepLabels[step.step_type]}</p>
+        {configSummary && (
+          <p className="text-xs text-gray-400 truncate">{configSummary}</p>
+        )}
+      </div>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={onMoveUp}
+          disabled={index === 0}
+          className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Move Up"
+        >
+          ↑
+        </button>
+        <button
+          onClick={onMoveDown}
+          disabled={index === total - 1}
+          className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Move Down"
+        >
+          ↓
+        </button>
+        <button
+          onClick={onEdit}
+          className="p-1 text-blue-400 hover:text-blue-300"
+          title="Edit"
+        >
+          ✏️
+        </button>
+        <button
+          onClick={onDelete}
+          className="p-1 text-red-400 hover:text-red-300"
+          title="Delete"
+        >
+          🗑️
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default StepCard;
