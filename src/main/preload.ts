@@ -38,6 +38,12 @@ const api: ElectronAPI = {
   onLogUpdate: (callback) => {
     ipcRenderer.on('log:update', callback);
   },
+  dialog: {
+    openFile: () => ipcRenderer.invoke('dialog:openFile'),
+  },
+  picker: {
+    coordinate: () => ipcRenderer.invoke('picker:coordinate'),
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

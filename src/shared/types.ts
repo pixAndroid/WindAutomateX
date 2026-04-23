@@ -94,6 +94,12 @@ export interface ElectronAPI {
   };
   onRunUpdate: (callback: (event: Electron.IpcRendererEvent, run: Run) => void) => void;
   onLogUpdate: (callback: (event: Electron.IpcRendererEvent, data: { runId: number; line: string }) => void) => void;
+  dialog: {
+    openFile: () => Promise<string | null>;
+  };
+  picker: {
+    coordinate: () => Promise<{ x: number; y: number } | null>;
+  };
 }
 
 declare global {
