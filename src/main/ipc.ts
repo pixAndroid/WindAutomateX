@@ -51,11 +51,14 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
     return result.canceled ? null : result.filePaths[0];
   });
 
-  // Coordinate picker — shows a transparent fullscreen overlay; resolves with {x, y} or null
+  // Coordinate picker — hides main window, shows a transparent fullscreen overlay; resolves with {x, y} or null
   ipcMain.handle('picker:coordinate', () => {
     return new Promise<{ x: number; y: number } | null>((resolve) => {
       const pickerPath = path.join(app.getAppPath(), 'assets', 'picker.html');
       const pickerPreload = path.join(__dirname, 'picker-preload.js');
+
+      // Hide the main window so it doesn't obstruct coordinate picking
+      mainWindow.hide();
 
       const pickerWin = new BrowserWindow({
         fullscreen: true,
@@ -73,16 +76,24 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
 
       pickerWin.loadFile(pickerPath);
 
+      let settled = false;
+      const finish = (coords: { x: number; y: number } | null) => {
+        if (settled) return;
+        settled = true;
+        if (!mainWindow.isDestroyed()) mainWindow.show();
+        resolve(coords);
+      };
+
       const resultListener = (_e: Electron.IpcMainEvent, coords: { x: number; y: number } | null) => {
         if (!pickerWin.isDestroyed()) pickerWin.close();
-        resolve(coords);
+        finish(coords);
       };
 
       ipcMain.once('picker:result', resultListener);
 
       pickerWin.on('closed', () => {
         ipcMain.off('picker:result', resultListener);
-        resolve(null);
+        finish(null);
       });
     });
   });
@@ -94,6 +105,9 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
     const steps = getSteps(taskId);
     const run = createRun(taskId);
     mainWindow.webContents.send('run:update', run);
+
+    // Minimize the main window so it doesn't interfere with automation clicks
+    mainWindow.minimize();
 
     const stepsJson = JSON.stringify(steps);
     const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
@@ -150,6 +164,11 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
         });
         mainWindow.webContents.send('run:update', endedRun);
         runningProcesses.delete(run.id);
+      }
+      // Restore main window after task finishes
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.restore();
+        mainWindow.show();
       }
     });
   });
