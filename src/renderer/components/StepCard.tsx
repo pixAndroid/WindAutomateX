@@ -47,13 +47,19 @@ interface StepCardProps {
   step: TaskStep;
   index: number;
   total: number;
+  isDragging?: boolean;
+  isDragOver?: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onDragStart: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: () => void;
+  onDragEnd: () => void;
 }
 
-const StepCard: React.FC<StepCardProps> = ({ step, index, total, onEdit, onDelete, onMoveUp, onMoveDown }) => {
+const StepCard: React.FC<StepCardProps> = ({ step, index, total, isDragging, isDragOver, onEdit, onDelete, onMoveUp, onMoveDown, onDragStart, onDragOver, onDrop, onDragEnd }) => {
   let configSummary = '';
   try {
     const config = JSON.parse(step.config_json);
@@ -64,7 +70,18 @@ const StepCard: React.FC<StepCardProps> = ({ step, index, total, onEdit, onDelet
   }
 
   return (
-    <div className="bg-gray-700 rounded-lg p-3 flex items-center gap-3 group">
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      className={[
+        'bg-gray-700 rounded-lg p-3 flex items-center gap-3 group cursor-grab active:cursor-grabbing transition-opacity border-2',
+        isDragging ? 'opacity-40' : 'opacity-100',
+        isDragOver ? 'border-blue-500' : 'border-transparent',
+      ].join(' ')}
+    >
       <span className="text-gray-400 text-sm w-6 text-center">{index + 1}</span>
       <span className="text-lg">{stepIcons[step.step_type]}</span>
       <div className="flex-1 min-w-0">
