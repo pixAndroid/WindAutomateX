@@ -12,6 +12,9 @@ from wait_utils import WaitUtils
 
 logger = logging.getLogger(__name__)
 
+# Brief pause after a window is found to allow it to finish rendering before the next step
+_WINDOW_SETTLE_DELAY_SECONDS = 0.3
+
 
 class WindAutomateXEngine:
     def __init__(self):
@@ -96,7 +99,7 @@ class WindAutomateXEngine:
         result = WaitUtils.wait_for_window(title, timeout)
         if result:
             # Small settle delay so the window is fully rendered before the next step
-            WaitUtils.wait_seconds(0.3)
+            WaitUtils.wait_seconds(_WINDOW_SETTLE_DELAY_SECONDS)
             return {"success": True, "message": f"Window found: {title}"}
         # Timeout is treated as a graceful wait — proceed to the next step regardless
         return {"success": True, "message": f"Timed out waiting for window '{title}' ({timeout}s), continuing"}
