@@ -14,7 +14,7 @@ const ALL_STEP_TYPES: StepType[] = [
 
 const defaultConfig: Record<StepType, Record<string, unknown>> = {
   launch_exe: { path: '', args: '' },
-  wait_window: { title: '', timeout: 30 },
+  wait_window: { window_title: '', timeout: 30 },
   click_element: { window_title: '', element_title: '', auto_id: '' },
   click_coordinate: { x: 0, y: 0 },
   type_text: { text: '', interval: 0.05 },
