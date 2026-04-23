@@ -13,24 +13,24 @@ const ALL_STEP_TYPES: StepType[] = [
 ];
 
 const defaultConfig: Record<StepType, Record<string, unknown>> = {
-  launch_exe: { path: '', args: '' },
-  wait_window: { window_title: '', timeout: 30 },
-  click_element: { window_title: '', element_title: '', auto_id: '' },
-  click_coordinate: { x: 0, y: 0 },
-  type_text: { text: '', interval: 0.05 },
-  press_key: { key: '' },
-  select_dropdown: { window_title: '', element_title: '', value: '' },
-  upload_file: { window_title: '', file_path: '' },
-  download_file: { url: '', save_path: '' },
-  wait_download: { folder: '', timeout: 300 },
-  wait_upload: { window_title: '', timeout: 60 },
-  read_text: { window_title: '', element_title: '', output_var: 'result' },
-  if_condition: { variable: '', operator: '==', value: '' },
-  loop: { count: 3 },
-  delay: { seconds: 1 },
-  screenshot: { path: '' },
-  close_app: { window_title: '' },
-  kill_process: { process_name: '' },
+  launch_exe: { path: '', args: '', delay: 60 },
+  wait_window: { window_title: '', timeout: 30, delay: 60 },
+  click_element: { window_title: '', element_title: '', auto_id: '', delay: 60 },
+  click_coordinate: { x: 0, y: 0, delay: 60 },
+  type_text: { text: '', interval: 0.05, delay: 60 },
+  press_key: { key: '', delay: 60 },
+  select_dropdown: { window_title: '', element_title: '', value: '', delay: 60 },
+  upload_file: { window_title: '', file_path: '', delay: 60 },
+  download_file: { url: '', save_path: '', delay: 60 },
+  wait_download: { folder: '', timeout: 300, delay: 60 },
+  wait_upload: { window_title: '', timeout: 60, delay: 60 },
+  read_text: { window_title: '', element_title: '', output_var: 'result', delay: 60 },
+  if_condition: { variable: '', operator: '==', value: '', delay: 60 },
+  loop: { count: 3, delay: 60 },
+  delay: { seconds: 1, delay: 60 },
+  screenshot: { path: '', delay: 60 },
+  close_app: { window_title: '', delay: 60 },
+  kill_process: { process_name: '', delay: 60 },
 };
 
 interface EditingStep {
@@ -78,6 +78,7 @@ const TaskBuilder: React.FC = () => {
     const step = steps[index];
     let config: Record<string, unknown> = {};
     try { config = JSON.parse(step.config_json); } catch { config = {}; }
+    if (config.delay === undefined) config.delay = 60;
     setEditingStep({ index, step: { ...step }, config });
   };
 
@@ -106,6 +107,23 @@ const TaskBuilder: React.FC = () => {
 
   const handleDeleteStep = (index: number) => {
     setSteps((prev) => prev.filter((_, i) => i !== index).map((s, i) => ({ ...s, step_order: i })));
+  };
+
+  const handleCopyStep = (index: number) => {
+    setSteps((prev) => {
+      const step = prev[index];
+      let config: Record<string, unknown> = {};
+      try { config = JSON.parse(step.config_json); } catch { config = {}; }
+      if (config.delay === undefined) config.delay = 60;
+      const copy: TaskStep = {
+        ...step,
+        id: 0,
+        config_json: JSON.stringify(config),
+      };
+      const next = [...prev];
+      next.splice(index + 1, 0, copy);
+      return next.map((s, i) => ({ ...s, step_order: i }));
+    });
   };
 
   const handleDragStart = (index: number) => {
@@ -248,6 +266,7 @@ const TaskBuilder: React.FC = () => {
                 isDragOver={dragOverIndex === i && dragIndex !== i}
                 onEdit={() => handleEditStep(i)}
                 onDelete={() => handleDeleteStep(i)}
+                onCopy={() => handleCopyStep(i)}
                 onMoveUp={() => handleMoveUp(i)}
                 onMoveDown={() => handleMoveDown(i)}
                 onDragStart={() => handleDragStart(i)}
@@ -379,7 +398,7 @@ const TaskBuilder: React.FC = () => {
                 </p>
               </>
             ) : (
-              Object.entries(editingStep.config).map(([key, value]) => (
+              Object.entries(editingStep.config).filter(([key]) => key !== 'delay').map(([key, value]) => (
                 <div key={key}>
                   <label className="block text-sm text-gray-400 mb-1">{key.replace(/_/g, ' ')}</label>
                   <input
@@ -403,6 +422,21 @@ const TaskBuilder: React.FC = () => {
                 </div>
               ))
             )}
+            {/* Delay field shown for all step types */}
+            <div className="border-t border-gray-600 pt-3">
+              <label className="block text-sm text-gray-400 mb-1">delay (ms)</label>
+              <input
+                type="number"
+                value={String(editingStep.config.delay ?? 60)}
+                onChange={(e) =>
+                  setEditingStep((prev) =>
+                    prev ? { ...prev, config: { ...prev.config, delay: Number(e.target.value) } } : null
+                  )
+                }
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">Delay in milliseconds after this step executes. Default: 60</p>
+            </div>
             <div className="flex justify-end gap-3 pt-2">
               <button onClick={() => setEditingStep(null)} className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm">
                 Cancel
