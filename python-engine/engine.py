@@ -95,8 +95,11 @@ class WindAutomateXEngine:
             return {"success": True, "message": f"Waited {timeout}s"}
         result = WaitUtils.wait_for_window(title, timeout)
         if result:
+            # Small settle delay so the window is fully rendered before the next step
+            WaitUtils.wait_seconds(0.3)
             return {"success": True, "message": f"Window found: {title}"}
-        return {"success": False, "message": f"Window not found within {timeout}s: {title}"}
+        # Timeout is treated as a graceful wait — proceed to the next step regardless
+        return {"success": True, "message": f"Timed out waiting for window '{title}' ({timeout}s), continuing"}
 
     def _click_element(self, config: dict) -> dict:
         if not self.pywinauto_available:
