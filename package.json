@@ -22,7 +22,7 @@
   "dependencies": {
     "better-sqlite3": "^12.9.0",
     "crypto-js": "^4.2.0",
-    "electron": "^29.1.0",
+    "electron": "39.8.1",
     "node-cron": "^3.0.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
