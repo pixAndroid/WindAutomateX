@@ -88,8 +88,11 @@ class WindAutomateXEngine:
         return {"success": True, "message": f"Launched: {exe_path}"}
 
     def _wait_window(self, config: dict) -> dict:
-        title = config.get("title", "")
+        title = config.get("window_title", "") or config.get("title", "")
         timeout = int(config.get("timeout", 30))
+        if not title:
+            WaitUtils.wait_seconds(timeout)
+            return {"success": True, "message": f"Waited {timeout}s"}
         result = WaitUtils.wait_for_window(title, timeout)
         if result:
             return {"success": True, "message": f"Window found: {title}"}
