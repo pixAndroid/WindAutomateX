@@ -88,7 +88,7 @@ class WindAutomateXEngine:
         return {"success": True, "message": f"Launched: {exe_path}"}
 
     def _wait_window(self, config: dict) -> dict:
-        title = config.get("window_title", "") or config.get("title", "")
+        title = config.get("window_title") if "window_title" in config else config.get("title", "")
         timeout = int(config.get("timeout", 30))
         if not title:
             WaitUtils.wait_seconds(timeout)
