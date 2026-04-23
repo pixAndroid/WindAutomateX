@@ -5,10 +5,7 @@ module.exports = (env) => {
   const isMain = env && env.target === 'main';
 
   if (isMain) {
-    return {
-      mode: 'development',
-      entry: './src/main/index.ts',
-      target: 'electron-main',
+    const sharedMainRules = {
       module: {
         rules: [
           {
@@ -21,10 +18,6 @@ module.exports = (env) => {
       resolve: {
         extensions: ['.tsx', '.ts', '.js'],
       },
-      output: {
-        filename: 'index.js',
-        path: path.resolve(__dirname, 'dist/main'),
-      },
       node: {
         __dirname: false,
         __filename: false,
@@ -33,6 +26,29 @@ module.exports = (env) => {
         'better-sqlite3': 'commonjs better-sqlite3',
       },
     };
+
+    return [
+      {
+        ...sharedMainRules,
+        mode: 'development',
+        entry: './src/main/index.ts',
+        target: 'electron-main',
+        output: {
+          filename: 'index.js',
+          path: path.resolve(__dirname, 'dist/main'),
+        },
+      },
+      {
+        ...sharedMainRules,
+        mode: 'development',
+        entry: './src/main/preload.ts',
+        target: 'electron-preload',
+        output: {
+          filename: 'preload.js',
+          path: path.resolve(__dirname, 'dist/main'),
+        },
+      },
+    ];
   }
 
   // Renderer config
