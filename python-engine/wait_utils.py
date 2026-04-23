@@ -29,7 +29,7 @@ class WaitUtils:
             return False
         except ImportError:
             logger.warning("pywinauto not available - simulating wait_for_window")
-            time.sleep(1)
+            time.sleep(timeout)
             return True
 
     @staticmethod
