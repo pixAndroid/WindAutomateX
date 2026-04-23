@@ -35,6 +35,9 @@ const api: ElectronAPI = {
   onRunUpdate: (callback) => {
     ipcRenderer.on('run:update', callback);
   },
+  offRunUpdate: (callback) => {
+    ipcRenderer.removeListener('run:update', callback);
+  },
   onLogUpdate: (callback) => {
     ipcRenderer.on('log:update', callback);
   },

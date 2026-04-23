@@ -20,7 +20,7 @@ const TaskManager: React.FC = () => {
   useEffect(() => { load(); }, []);
 
   useEffect(() => {
-    window.electronAPI.onRunUpdate((_event, run) => {
+    const handleRunUpdate = (_event: Electron.IpcRendererEvent, run: import('../../shared/types').Run) => {
       setRunningTasks((prev) => {
         const next = new Map(prev);
         if (run.status === 'running') {
@@ -30,7 +30,11 @@ const TaskManager: React.FC = () => {
         }
         return next;
       });
-    });
+    };
+    window.electronAPI.onRunUpdate(handleRunUpdate);
+    return () => {
+      window.electronAPI.offRunUpdate(handleRunUpdate);
+    };
   }, []);
 
   const filtered = tasks.filter((t) => {

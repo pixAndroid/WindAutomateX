@@ -76,7 +76,11 @@ const StepCard: React.FC<StepCardProps> = ({ step, index, total, isDragging, isD
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      className={`bg-gray-700 rounded-lg p-3 flex items-center gap-3 group cursor-grab active:cursor-grabbing transition-opacity ${isDragging ? 'opacity-40' : 'opacity-100'} ${isDragOver ? 'border-2 border-blue-500' : 'border-2 border-transparent'}`}
+      className={[
+        'bg-gray-700 rounded-lg p-3 flex items-center gap-3 group cursor-grab active:cursor-grabbing transition-opacity border-2',
+        isDragging ? 'opacity-40' : 'opacity-100',
+        isDragOver ? 'border-blue-500' : 'border-transparent',
+      ].join(' ')}
     >
       <span className="text-gray-400 text-sm w-6 text-center">{index + 1}</span>
       <span className="text-lg">{stepIcons[step.step_type]}</span>
