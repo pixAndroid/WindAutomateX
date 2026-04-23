@@ -4,7 +4,7 @@
   "description": "Windows Desktop Automation Application",
   "main": "dist/main/index.js",
   "scripts": {
-    "dev": "concurrently \"npm run build:main:watch\" \"npm run build:renderer:watch\" \"electron .\"",
+    "dev": "npm run build && concurrently \"npm run build:main:watch\" \"npm run build:renderer:watch\" \"electron .\"",
     "build": "npm run build:main && npm run build:renderer",
     "build:main": "webpack --config webpack.config.js --env target=main",
     "build:main:watch": "webpack --config webpack.config.js --env target=main --watch",
