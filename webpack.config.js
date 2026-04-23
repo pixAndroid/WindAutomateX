@@ -54,6 +54,7 @@ module.exports = (env) => {
   // Renderer config
   return {
     mode: 'development',
+    devtool: 'cheap-module-source-map',
     entry: './src/renderer/index.tsx',
     target: 'electron-renderer',
     module: {
