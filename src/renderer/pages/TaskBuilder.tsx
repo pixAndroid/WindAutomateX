@@ -241,29 +241,130 @@ const TaskBuilder: React.FC = () => {
       >
         {editingStep && (
           <div className="space-y-4">
-            {Object.entries(editingStep.config).map(([key, value]) => (
-              <div key={key}>
-                <label className="block text-sm text-gray-400 mb-1">{key.replace(/_/g, ' ')}</label>
-                <input
-                  type={typeof value === 'number' ? 'number' : 'text'}
-                  value={String(value)}
-                  onChange={(e) =>
-                    setEditingStep((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            config: {
-                              ...prev.config,
-                              [key]: typeof value === 'number' ? Number(e.target.value) : e.target.value,
-                            },
-                          }
-                        : null
-                    )
-                  }
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                />
-              </div>
-            ))}
+            {editingStep.step.step_type === 'launch_exe' ? (
+              <>
+                {/* Path field with Browse button */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">path</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={String(editingStep.config.path ?? '')}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, path: e.target.value } } : null
+                        )
+                      }
+                      placeholder="C:\Program Files\App\app.exe"
+                      className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      onClick={async () => {
+                        const filePath = await window.electronAPI.dialog.openFile();
+                        if (filePath) {
+                          setEditingStep((prev) =>
+                            prev ? { ...prev, config: { ...prev.config, path: filePath } } : null
+                          );
+                        }
+                      }}
+                      className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap"
+                    >
+                      Browse…
+                    </button>
+                  </div>
+                </div>
+                {/* Args field with hint */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">args</label>
+                  <input
+                    type="text"
+                    value={String(editingStep.config.args ?? '')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, args: e.target.value } } : null
+                      )
+                    }
+                    placeholder="e.g. --headless --no-sandbox"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Space-separated command-line arguments. Examples: <code className="text-gray-400">--flag</code>, <code className="text-gray-400">--key value</code>, <code className="text-gray-400">/silent /norestart</code>
+                  </p>
+                </div>
+              </>
+            ) : editingStep.step.step_type === 'click_coordinate' ? (
+              <>
+                {/* X and Y fields with Pick from Screen button */}
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-1">x</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.x ?? 0)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, x: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-1">y</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.y ?? 0)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, y: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    const coords = await window.electronAPI.picker.coordinate();
+                    if (coords) {
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, x: coords.x, y: coords.y } } : null
+                      );
+                    }
+                  }}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm flex items-center justify-center gap-2"
+                >
+                  🎯 Pick from Screen
+                </button>
+                <p className="text-xs text-gray-500">
+                  Click "Pick from Screen" to open an overlay — then click anywhere on screen to capture absolute screen coordinates.
+                </p>
+              </>
+            ) : (
+              Object.entries(editingStep.config).map(([key, value]) => (
+                <div key={key}>
+                  <label className="block text-sm text-gray-400 mb-1">{key.replace(/_/g, ' ')}</label>
+                  <input
+                    type={typeof value === 'number' ? 'number' : 'text'}
+                    value={String(value)}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              config: {
+                                ...prev.config,
+                                [key]: typeof value === 'number' ? Number(e.target.value) : e.target.value,
+                              },
+                            }
+                          : null
+                      )
+                    }
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              ))
+            )}
             <div className="flex justify-end gap-3 pt-2">
               <button onClick={() => setEditingStep(null)} className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm">
                 Cancel

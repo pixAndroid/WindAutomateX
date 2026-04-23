@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow, dialog, app } from 'electron';
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import {
@@ -38,6 +38,54 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
   // Settings
   ipcMain.handle('settings:get', () => getSettings());
   ipcMain.handle('settings:save', (_e, settings: Settings) => saveSettings(settings));
+
+  // File dialog — open a single exe/script file
+  ipcMain.handle('dialog:openFile', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [
+        { name: 'Executables', extensions: ['exe', 'bat', 'cmd', 'sh'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  // Coordinate picker — shows a transparent fullscreen overlay; resolves with {x, y} or null
+  ipcMain.handle('picker:coordinate', () => {
+    return new Promise<{ x: number; y: number } | null>((resolve) => {
+      const pickerPath = path.join(app.getAppPath(), 'assets', 'picker.html');
+      const pickerPreload = path.join(__dirname, 'picker-preload.js');
+
+      const pickerWin = new BrowserWindow({
+        fullscreen: true,
+        transparent: true,
+        frame: false,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        resizable: false,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          preload: pickerPreload,
+        },
+      });
+
+      pickerWin.loadFile(pickerPath);
+
+      const resultListener = (_e: Electron.IpcMainEvent, coords: { x: number; y: number } | null) => {
+        if (!pickerWin.isDestroyed()) pickerWin.close();
+        resolve(coords);
+      };
+
+      ipcMain.once('picker:result', resultListener);
+
+      pickerWin.on('closed', () => {
+        ipcMain.off('picker:result', resultListener);
+        resolve(null);
+      });
+    });
+  });
 
   // Task run/stop/pause
   ipcMain.handle('task:run', async (_e, taskId: number) => {

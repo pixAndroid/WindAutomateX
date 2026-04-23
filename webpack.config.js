@@ -48,6 +48,16 @@ module.exports = (env) => {
           path: path.resolve(__dirname, 'dist/main'),
         },
       },
+      {
+        ...sharedMainRules,
+        mode: 'development',
+        entry: './src/main/picker-preload.ts',
+        target: 'electron-preload',
+        output: {
+          filename: 'picker-preload.js',
+          path: path.resolve(__dirname, 'dist/main'),
+        },
+      },
     ];
   }
 

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background: rgba(0, 0, 0, 0.35);
+        cursor: crosshair;
+        user-select: none;
+      }
+      #h-line, #v-line {
+        position: fixed;
+        background: rgba(59, 130, 246, 0.6);
+        pointer-events: none;
+      }
+      #h-line { height: 1px; width: 100%; top: 0; left: 0; }
+      #v-line { width: 1px; height: 100%; top: 0; left: 0; }
+      #info-box {
+        position: fixed;
+        top: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(17, 24, 39, 0.92);
+        color: #fff;
+        padding: 12px 28px;
+        border-radius: 10px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 15px;
+        text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        pointer-events: none;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+      }
+      #info-box small {
+        display: block;
+        color: #9ca3af;
+        margin-top: 4px;
+        font-size: 12px;
+      }
+      #coords-tooltip {
+        position: fixed;
+        background: rgba(59, 130, 246, 0.92);
+        color: #fff;
+        padding: 5px 12px;
+        border-radius: 6px;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        pointer-events: none;
+        transform: translate(16px, 16px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        white-space: nowrap;
+      }
+      #cancel-btn {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(239, 68, 68, 0.9);
+        color: #fff;
+        padding: 10px 24px;
+        border-radius: 8px;
+        border: none;
+        font-size: 14px;
+        cursor: pointer;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+      #cancel-btn:hover { background: rgba(220, 38, 38, 0.95); }
+    </style>
+  </head>
+  <body>
+    <div id="h-line"></div>
+    <div id="v-line"></div>
+    <div id="info-box">
+      🎯 Click anywhere to capture coordinates
+      <small>Press Escape or click Cancel to abort</small>
+    </div>
+    <div id="coords-tooltip">X: 0,  Y: 0</div>
+    <button id="cancel-btn">Cancel (Esc)</button>
+    <script>
+      document.addEventListener('mousemove', (e) => {
+        const tooltip = document.getElementById('coords-tooltip');
+        const hLine = document.getElementById('h-line');
+        const vLine = document.getElementById('v-line');
+        tooltip.style.left = e.clientX + 'px';
+        tooltip.style.top = e.clientY + 'px';
+        tooltip.textContent = 'X: ' + e.screenX + ',  Y: ' + e.screenY;
+        hLine.style.top = e.clientY + 'px';
+        vLine.style.left = e.clientX + 'px';
+      });
+
+      document.addEventListener('click', (e) => {
+        if (e.target === document.getElementById('cancel-btn')) return;
+        window.pickerAPI.sendResult({ x: e.screenX, y: e.screenY });
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          window.pickerAPI.sendResult(null);
+        }
+      });
+
+      document.getElementById('cancel-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.pickerAPI.sendResult(null);
+      });
+    </script>
+  </body>
+</html>
