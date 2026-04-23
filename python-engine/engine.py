@@ -5,6 +5,7 @@ Handles execution of individual automation steps.
 import json
 import logging
 import subprocess
+import sys
 import time
 import os
 
@@ -114,12 +115,23 @@ class WindAutomateXEngine:
             return {"success": False, "message": str(e)}
 
     def _click_coordinate(self, config: dict) -> dict:
-        if not self.pyautogui_available:
-            return {"success": False, "message": "pyautogui not available"}
-        import pyautogui
         x = int(config.get("x", 0))
         y = int(config.get("y", 0))
-        pyautogui.click(x, y)
+        if sys.platform == 'win32':
+            import ctypes
+            # SetCursorPos takes virtual-desktop (logical) coordinates and works correctly
+            # across all monitors, avoiding the SendInput MOUSEEVENTF_ABSOLUTE normalization
+            # issue where pyautogui maps to the primary screen dimensions only.
+            ctypes.windll.user32.SetCursorPos(x, y)
+            time.sleep(0.05)
+            # Click at the current cursor position (no absolute normalization involved).
+            ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTDOWN
+            ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTUP
+        else:
+            if not self.pyautogui_available:
+                return {"success": False, "message": "pyautogui not available"}
+            import pyautogui
+            pyautogui.click(x, y)
         return {"success": True, "message": f"Clicked at ({x}, {y})"}
 
     def _type_text(self, config: dict) -> dict:
