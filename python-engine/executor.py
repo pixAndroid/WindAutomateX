@@ -4,6 +4,7 @@ Executor: runs a list of task steps sequentially using the engine.
 import json
 import logging
 import sys
+import time
 
 from engine import WindAutomateXEngine
 
@@ -47,6 +48,17 @@ class TaskExecutor:
                 logger.error(f"Step {i + 1} failed: {result.get('message')}")
                 print(json.dumps({"status": "failed", "message": result.get("message", "Step failed")}), flush=True)
                 return {"status": "failed", "step": i + 1, "message": result.get("message", "")}
+
+            try:
+                config = json.loads(step.get("config_json", "{}") or "{}")
+            except json.JSONDecodeError:
+                config = {}
+            try:
+                delay_ms = int(config.get("delay", 60))
+            except (TypeError, ValueError):
+                delay_ms = 60
+            if delay_ms > 0:
+                time.sleep(delay_ms / 1000.0)
 
         logger.info(f"Task {task_id} completed successfully")
         print(json.dumps({"status": "completed", "task_id": task_id, "steps_run": total}), flush=True)
