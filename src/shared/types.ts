@@ -35,7 +35,8 @@ export type StepType =
   | 'delay'
   | 'screenshot'
   | 'close_app'
-  | 'kill_process';
+  | 'kill_process'
+  | 'keyboard_shortcut';
 
 export interface Run {
   id: number;

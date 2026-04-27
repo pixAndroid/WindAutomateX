@@ -57,6 +57,7 @@ class WindAutomateXEngine:
             "click_coordinate": self._click_coordinate,
             "type_text": self._type_text,
             "press_key": self._press_key,
+            "keyboard_shortcut": self._keyboard_shortcut,
             "select_dropdown": self._select_dropdown,
             "upload_file": self._upload_file,
             "download_file": self._download_file,
@@ -147,6 +148,20 @@ class WindAutomateXEngine:
         key = config.get("key", "")
         pyautogui.press(key)
         return {"success": True, "message": f"Pressed key: {key}"}
+
+    def _keyboard_shortcut(self, config: dict) -> dict:
+        if not self.pyautogui_available:
+            return {"success": False, "message": "pyautogui not available"}
+        import pyautogui
+        keys_str = config.get("keys", "")
+        if not keys_str:
+            return {"success": False, "message": "No keys specified"}
+        keys = [k.strip() for k in keys_str.split("+") if k.strip()]
+        if len(keys) == 1:
+            pyautogui.press(keys[0])
+        else:
+            pyautogui.hotkey(*keys)
+        return {"success": True, "message": f"Keyboard shortcut: {keys_str}"}
 
     def _select_dropdown(self, config: dict) -> dict:
         if not self.pywinauto_available:
