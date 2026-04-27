@@ -315,6 +315,25 @@ def click_submit(selector: str, engine) -> None:
         pyautogui.press("enter")
 
 
+def _press_keyboard_shortcut(shortcut: str, engine) -> None:
+    """Press a keyboard shortcut using pyautogui.
+
+    *shortcut* should be a ``+``-separated string of key names such as
+    ``"enter"``, ``"ctrl+s"``, or ``"alt+f4"``.
+    """
+    if not shortcut:
+        return
+    if engine.pyautogui_available:
+        import pyautogui
+        keys = [k.strip().lower() for k in shortcut.split("+") if k.strip()]
+        if not keys:
+            return
+        if len(keys) == 1:
+            pyautogui.press(keys[0])
+        else:
+            pyautogui.hotkey(*keys)
+
+
 def _wait_for_success_text(success_text: str, timeout_ms: int, engine) -> bool:
     """Poll the active window for *success_text* until *timeout_ms* elapses."""
     if not success_text or not engine.pywinauto_available:
@@ -365,7 +384,8 @@ def process_row(
     Returns {"success": bool, "message": str}.
     """
     mappings: list[dict] = config.get("mappings", [])
-    submit_selector: str = config.get("submitSelector", "")
+    submit_actions: list[dict] = config.get("submitActions") or []
+    submit_selector: str = config.get("submitSelector", "")  # backward compat
     wait_after_submit: int = int(config.get("waitAfterSubmit", 1500))
     success_text: str = config.get("successText", "") or ""
     clear_form: bool = bool(config.get("clearFormBeforeNextRow", False))
@@ -394,11 +414,23 @@ def process_row(
             value = row.get(column, "")
             fill_field(selector, str(value), input_type, engine)
 
-        # Click submit
-        if submit_selector:
+        # Execute submit actions (new multi-action list takes precedence)
+        if submit_actions:
+            for action in submit_actions:
+                action_type = action.get("type", "coordinate")
+                value = action.get("value", "")
+                if not value:
+                    logger.warning(f"Row {row_index + 1}: submit action of type '{action_type}' has no value, skipping")
+                    continue
+                if action_type == "coordinate":
+                    click_submit(value, engine)
+                elif action_type == "keyboard":
+                    _press_keyboard_shortcut(value, engine)
+        elif submit_selector:
+            # Backward-compatible: old single submitSelector
             click_submit(submit_selector, engine)
         else:
-            return {"success": False, "message": "submitSelector is empty"}
+            return {"success": False, "message": "No submit actions configured"}
 
         # Wait after submit
         if success_text:
@@ -449,8 +481,9 @@ def run_excel_form_loop(config: dict, engine) -> dict:
     # Validate required fields
     if not file_path:
         return {"success": False, "message": "filePath is required"}
-    if not config.get("submitSelector"):
-        return {"success": False, "message": "submitSelector is required"}
+    submit_actions = config.get("submitActions") or []
+    if not submit_actions and not config.get("submitSelector"):
+        return {"success": False, "message": "At least one submit action is required"}
     if not config.get("mappings"):
         return {"success": False, "message": "At least one field mapping is required"}
 
