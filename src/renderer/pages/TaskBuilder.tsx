@@ -405,16 +405,18 @@ const TaskBuilder: React.FC = () => {
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      readOnly
                       value={String(editingStep.config.keys ?? '')}
-                      placeholder="Click here and press keys…"
+                      placeholder="Click here and press keys… or type manually (e.g. alt+tab)"
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, keys: e.target.value } } : null
+                        )
+                      }
                       onKeyDown={(e) => {
-                        e.preventDefault();
-                        const parts: string[] = [];
-                        if (e.ctrlKey) parts.push('ctrl');
-                        if (e.altKey) parts.push('alt');
-                        if (e.shiftKey) parts.push('shift');
-                        if (e.metaKey) parts.push('win');
+                        // Allow normal typing (e.g. manual "alt+tab") when no modifier except shift is held,
+                        // or when the key itself is a printable character typed without modifiers.
+                        // Auto-capture combos when a modifier (ctrl/alt/meta) is involved.
+                        const hasModifier = e.ctrlKey || e.altKey || e.metaKey;
                         const KEY_MAP: Record<string, string> = {
                           // Modifier-only keys are handled via e.ctrlKey/altKey/shiftKey/metaKey above;
                           // map them to '' so they are filtered out and don't appear as a trailing key.
@@ -426,12 +428,22 @@ const TaskBuilder: React.FC = () => {
                           F1: 'f1', F2: 'f2', F3: 'f3', F4: 'f4', F5: 'f5', F6: 'f6',
                           F7: 'f7', F8: 'f8', F9: 'f9', F10: 'f10', F11: 'f11', F12: 'f12',
                         };
-                        const mappedKey = e.key in KEY_MAP ? KEY_MAP[e.key] : e.key.toLowerCase();
-                        if (mappedKey) parts.push(mappedKey);
-                        if (parts.length > 0) {
-                          setEditingStep((prev) =>
-                            prev ? { ...prev, config: { ...prev.config, keys: parts.join('+') } } : null
-                          );
+                        const isSpecialKey = e.key in KEY_MAP && KEY_MAP[e.key] !== '';
+                        // Auto-capture when a modifier key is held or a special key is pressed alone
+                        if (hasModifier || isSpecialKey) {
+                          e.preventDefault();
+                          const parts: string[] = [];
+                          if (e.ctrlKey) parts.push('ctrl');
+                          if (e.altKey) parts.push('alt');
+                          if (e.shiftKey) parts.push('shift');
+                          if (e.metaKey) parts.push('win');
+                          const mappedKey = e.key in KEY_MAP ? KEY_MAP[e.key] : e.key.toLowerCase();
+                          if (mappedKey) parts.push(mappedKey);
+                          if (parts.length > 0) {
+                            setEditingStep((prev) =>
+                              prev ? { ...prev, config: { ...prev.config, keys: parts.join('+') } } : null
+                            );
+                          }
                         }
                       }}
                       className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 cursor-pointer font-mono"
@@ -448,7 +460,7 @@ const TaskBuilder: React.FC = () => {
                     </button>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    Click the field and press your desired key combination (e.g. Ctrl+C, Alt+F4, Ctrl+Shift+S).
+                    Press a key combination to auto-capture (e.g. Ctrl+C, Alt+F4, Ctrl+Shift+S), or type it manually for OS-level shortcuts like Alt+Tab.
                   </p>
                 </div>
               </>
