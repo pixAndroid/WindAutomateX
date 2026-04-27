@@ -36,7 +36,8 @@ export type StepType =
   | 'screenshot'
   | 'close_app'
   | 'kill_process'
-  | 'keyboard_shortcut';
+  | 'keyboard_shortcut'
+  | 'excel_form_submit_loop';
 
 export interface Run {
   id: number;
@@ -98,6 +99,7 @@ export interface ElectronAPI {
   onLogUpdate: (callback: (event: Electron.IpcRendererEvent, data: { runId: number; line: string }) => void) => void;
   dialog: {
     openFile: () => Promise<string | null>;
+    openExcelFile: () => Promise<string | null>;
   };
   picker: {
     coordinate: () => Promise<{ x: number; y: number } | null>;

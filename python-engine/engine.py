@@ -70,6 +70,7 @@ class WindAutomateXEngine:
             "screenshot": self._screenshot,
             "close_app": self._close_app,
             "kill_process": self._kill_process,
+            "excel_form_submit_loop": self._excel_form_submit_loop,
         }
 
         handler = handlers.get(step_type)
@@ -310,3 +311,7 @@ class WindAutomateXEngine:
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
         return {"success": True, "message": f"Killed {killed} process(es) matching '{process_name}'"}
+
+    def _excel_form_submit_loop(self, config: dict) -> dict:
+        from excel_loop import run_excel_form_loop
+        return run_excel_form_loop(config, self)
