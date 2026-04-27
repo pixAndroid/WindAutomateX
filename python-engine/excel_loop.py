@@ -196,7 +196,30 @@ def fill_field(selector: str, value: str, input_type: str, engine) -> None:
 
     Uses pywinauto (element title / auto_id) for native controls, or
     pyautogui tab-typing as a fallback.
+
+    When *input_type* is ``"coordinate"``, *selector* must be ``"x,y"``
+    (absolute screen coordinates).  The helper clicks that position and
+    then types the value.
     """
+    if input_type == "coordinate":
+        parts = selector.split(",")
+        if len(parts) != 2:
+            raise ValueError(
+                f"coordinate selector must be 'x,y' with numeric values, got: {selector!r}"
+            )
+        try:
+            x, y = int(parts[0].strip()), int(parts[1].strip())
+        except ValueError:
+            raise ValueError(
+                f"coordinate selector 'x,y' must contain integers, got: {selector!r}"
+            )
+        if engine.pyautogui_available:
+            import pyautogui
+            pyautogui.click(x, y)
+            time.sleep(0.1)
+            pyautogui.hotkey("ctrl", "a")
+            pyautogui.write(str(value), interval=0.03)
+        return
     if input_type == "text":
         if engine.pywinauto_available:
             from pywinauto import Application, findwindows
@@ -253,7 +276,22 @@ def fill_field(selector: str, value: str, input_type: str, engine) -> None:
 
 
 def click_submit(selector: str, engine) -> None:
-    """Click the submit button identified by *selector*."""
+    """Click the submit button identified by *selector*.
+
+    *selector* may be an element auto_id / title string, or an ``"x,y"``
+    coordinate string produced by the screen coordinate picker.
+    """
+    # Coordinate shortcut: "x,y" format
+    parts = selector.split(",")
+    if len(parts) == 2:
+        try:
+            x, y = int(parts[0].strip()), int(parts[1].strip())
+            if engine.pyautogui_available:
+                import pyautogui
+                pyautogui.click(x, y)
+            return
+        except ValueError:
+            pass  # not a coordinate selector — fall through to element-based logic
     if engine.pywinauto_available:
         from pywinauto import Application, findwindows
         wins = findwindows.find_windows(active_only=True)
