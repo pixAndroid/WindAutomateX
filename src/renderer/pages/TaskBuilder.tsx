@@ -7,7 +7,7 @@ import { useToast } from '../components/Toast';
 
 const ALL_STEP_TYPES: StepType[] = [
   'launch_exe', 'wait_window', 'click_element', 'click_coordinate',
-  'type_text', 'press_key', 'select_dropdown', 'upload_file',
+  'type_text', 'press_key', 'keyboard_shortcut', 'select_dropdown', 'upload_file',
   'download_file', 'wait_download', 'wait_upload', 'read_text',
   'if_condition', 'loop', 'delay', 'screenshot', 'close_app', 'kill_process',
 ];
@@ -19,6 +19,7 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
   click_coordinate: { x: 0, y: 0, delay: 60 },
   type_text: { text: '', interval: 0.05, delay: 60 },
   press_key: { key: '', delay: 60 },
+  keyboard_shortcut: { keys: '', delay: 60 },
   select_dropdown: { window_title: '', element_title: '', value: '', delay: 60 },
   upload_file: { window_title: '', file_path: '', delay: 60 },
   download_file: { url: '', save_path: '', delay: 60 },
@@ -396,6 +397,60 @@ const TaskBuilder: React.FC = () => {
                 <p className="text-xs text-gray-500">
                   Click "Pick from Screen" to open an overlay — then click anywhere on screen to capture absolute screen coordinates.
                 </p>
+              </>
+            ) : editingStep.step.step_type === 'keyboard_shortcut' ? (
+              <>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Keyboard Shortcut</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={String(editingStep.config.keys ?? '')}
+                      placeholder="Click here and press keys…"
+                      onKeyDown={(e) => {
+                        e.preventDefault();
+                        const parts: string[] = [];
+                        if (e.ctrlKey) parts.push('ctrl');
+                        if (e.altKey) parts.push('alt');
+                        if (e.shiftKey) parts.push('shift');
+                        if (e.metaKey) parts.push('win');
+                        const KEY_MAP: Record<string, string> = {
+                          // Modifier-only keys are handled via e.ctrlKey/altKey/shiftKey/metaKey above;
+                          // map them to '' so they are filtered out and don't appear as a trailing key.
+                          Control: '', Alt: '', Shift: '', Meta: '',
+                          ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+                          Escape: 'esc', Enter: 'enter', Tab: 'tab', Delete: 'delete',
+                          Backspace: 'backspace', Insert: 'insert', Home: 'home', End: 'end',
+                          PageUp: 'pageup', PageDown: 'pagedown', ' ': 'space',
+                          F1: 'f1', F2: 'f2', F3: 'f3', F4: 'f4', F5: 'f5', F6: 'f6',
+                          F7: 'f7', F8: 'f8', F9: 'f9', F10: 'f10', F11: 'f11', F12: 'f12',
+                        };
+                        const mappedKey = e.key in KEY_MAP ? KEY_MAP[e.key] : e.key.toLowerCase();
+                        if (mappedKey) parts.push(mappedKey);
+                        if (parts.length > 0) {
+                          setEditingStep((prev) =>
+                            prev ? { ...prev, config: { ...prev.config, keys: parts.join('+') } } : null
+                          );
+                        }
+                      }}
+                      className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 cursor-pointer font-mono"
+                    />
+                    <button
+                      onClick={() =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, keys: '' } } : null
+                        )
+                      }
+                      className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-lg text-sm"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Click the field and press your desired key combination (e.g. Ctrl+C, Alt+F4, Ctrl+Shift+S).
+                  </p>
+                </div>
               </>
             ) : (
               Object.entries(editingStep.config).filter(([key]) => key !== 'delay').map(([key, value]) => (
