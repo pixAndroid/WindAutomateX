@@ -401,7 +401,7 @@ const TaskBuilder: React.FC = () => {
             ) : editingStep.step.step_type === 'keyboard_shortcut' ? (
               <>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">keyboard shortcut</label>
+                  <label className="block text-sm text-gray-400 mb-1">Keyboard Shortcut</label>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -416,6 +416,8 @@ const TaskBuilder: React.FC = () => {
                         if (e.shiftKey) parts.push('shift');
                         if (e.metaKey) parts.push('win');
                         const KEY_MAP: Record<string, string> = {
+                          // Modifier-only keys are handled via e.ctrlKey/altKey/shiftKey/metaKey above;
+                          // map them to '' so they are filtered out and don't appear as a trailing key.
                           Control: '', Alt: '', Shift: '', Meta: '',
                           ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
                           Escape: 'esc', Enter: 'enter', Tab: 'tab', Delete: 'delete',
