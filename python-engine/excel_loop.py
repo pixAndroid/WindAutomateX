@@ -18,6 +18,10 @@ import time
 
 logger = logging.getLogger(__name__)
 
+# Offset used when converting 1-based sheet row numbers to 0-based list indices
+# that also account for a header row: header(1) + 1-based(1) = offset of 2.
+_HEADER_ROW_OFFSET = 2
+
 # ---------------------------------------------------------------------------
 # Resume-state file helpers
 # ---------------------------------------------------------------------------
@@ -122,7 +126,7 @@ def _load_xlsx_rows(
         headers = [str(c) if c is not None else f"col_{i}" for i, c in enumerate(all_rows[0])]
         data_rows = all_rows[1:]
         # start_row is 1-based counting from the first DATA row
-        slice_start = max(0, start_row - 2)
+        slice_start = max(0, start_row - _HEADER_ROW_OFFSET)
     else:
         headers = [f"col_{i}" for i in range(len(all_rows[0]))]
         data_rows = all_rows
@@ -162,7 +166,7 @@ def _load_csv_rows(
     if has_header:
         headers = raw_rows[0]
         data_rows = raw_rows[1:]
-        slice_start = max(0, start_row - 2)
+        slice_start = max(0, start_row - _HEADER_ROW_OFFSET)
     else:
         headers = [f"col_{i}" for i in range(len(raw_rows[0]))]
         data_rows = raw_rows
@@ -216,7 +220,7 @@ def fill_field(selector: str, value: str, input_type: str, engine) -> None:
         if engine.pyautogui_available:
             import pyautogui
             pyautogui.hotkey("ctrl", "a")
-            pyautogui.typewrite(str(value), interval=0.03)
+            pyautogui.write(str(value), interval=0.03)
     elif input_type == "dropdown":
         if engine.pywinauto_available:
             from pywinauto import Application, findwindows
@@ -429,7 +433,7 @@ def run_excel_form_loop(config: dict, engine) -> dict:
     resume_from = 0
     if resume:
         last = _load_resume_state(file_path)
-        if last >= 0 and last < total - 1:
+        if last >= 0 and last < total:
             resume_from = last + 1
             logger.info(f"Resuming from row {resume_from + 1} (last successful: {last + 1})")
             print(json.dumps({"event": "excel_loop_resume", "from_row": resume_from + 1}), flush=True)
