@@ -158,6 +158,52 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
     });
   });
 
+  // Screen capture picker — shows save dialog, minimises main window, waits 3 s, takes screenshot via Python
+  ipcMain.handle('picker:captureScreen', async () => {
+    // Ask the user where to save the capture first
+    const saveResult = await dialog.showSaveDialog(mainWindow, {
+      title: 'Save Screen Capture As',
+      defaultPath: `capture_${Date.now()}.png`,
+      filters: [{ name: 'PNG Image', extensions: ['png'] }],
+    });
+
+    if (saveResult.canceled || !saveResult.filePath) return null;
+    const savePath = saveResult.filePath;
+
+    // Minimise main window so it doesn't appear in the screenshot
+    if (!mainWindow.isDestroyed()) mainWindow.minimize();
+
+    // Give the user 3 seconds to navigate to the target screen/window
+    await new Promise<void>((resolve) => setTimeout(resolve, 3000));
+
+    const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
+    const settings = getSettings();
+    const python = settings.python_path || pythonPath || 'python';
+
+    const capturedPath = await new Promise<string | null>((resolve) => {
+      const proc = spawn(python, [enginePath], { stdio: ['pipe', 'pipe', 'pipe'] });
+      let output = '';
+      proc.stdout.on('data', (data: Buffer) => { output += data.toString(); });
+      proc.stdin.write(JSON.stringify({ command: 'capture_screenshot', save_path: savePath }) + '\n');
+      proc.stdin.end();
+      proc.on('close', () => {
+        try {
+          for (const line of output.trim().split('\n')) {
+            const msg = JSON.parse(line);
+            if (msg.status === 'ok' && msg.path) { resolve(msg.path as string); return; }
+          }
+        } catch { /* ignore parse errors */ }
+        resolve(null);
+      });
+      proc.on('error', () => resolve(null));
+    });
+
+    // Restore main window
+    if (!mainWindow.isDestroyed()) { mainWindow.restore(); mainWindow.show(); }
+
+    return capturedPath;
+  });
+
   // Task run/stop/pause
   ipcMain.handle('task:run', async (_e, taskId: number) => {
     const task = getTask(taskId);
