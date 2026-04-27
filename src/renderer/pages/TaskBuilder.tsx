@@ -73,6 +73,8 @@ const TaskBuilder: React.FC = () => {
   const [selectedStepType, setSelectedStepType] = useState<StepType>('launch_exe');
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [dragActionIndex, setDragActionIndex] = useState<number | null>(null);
+  const [dragOverActionIndex, setDragOverActionIndex] = useState<number | null>(null);
   const [excelColumns, setExcelColumns] = useState<string[]>([]);
 
   useEffect(() => {
@@ -716,8 +718,29 @@ const TaskBuilder: React.FC = () => {
                 <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider pt-1">Submit Actions</p>
                 <div className="space-y-2">
                   {(editingStep.config.submitActions as { type: string; value: string }[]).map((action, ai) => (
-                    <div key={ai} className="flex flex-col gap-1 bg-gray-750 rounded-lg p-2 border border-gray-600">
+                    <div
+                      key={ai}
+                      draggable
+                      onDragStart={() => setDragActionIndex(ai)}
+                      onDragOver={(e) => { e.preventDefault(); setDragOverActionIndex(ai); }}
+                      onDrop={() => {
+                        if (dragActionIndex === null || dragActionIndex === ai) return;
+                        const submitActions = [...(editingStep.config.submitActions as { type: string; value: string }[])];
+                        const [moved] = submitActions.splice(dragActionIndex, 1);
+                        submitActions.splice(ai, 0, moved);
+                        setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                        setDragActionIndex(null);
+                        setDragOverActionIndex(null);
+                      }}
+                      onDragEnd={() => { setDragActionIndex(null); setDragOverActionIndex(null); }}
+                      className={[
+                        'flex flex-col gap-1 bg-gray-750 rounded-lg p-2 border cursor-grab active:cursor-grabbing transition-opacity',
+                        dragActionIndex === ai ? 'opacity-40' : 'opacity-100',
+                        dragOverActionIndex === ai && dragActionIndex !== ai ? 'border-blue-500' : 'border-gray-600',
+                      ].join(' ')}
+                    >
                       <div className="flex gap-2 items-center">
+                        <span className="text-gray-500 text-xs select-none">⠿</span>
                         <select
                           value={action.type}
                           onChange={(e) => {
@@ -732,6 +755,17 @@ const TaskBuilder: React.FC = () => {
                           <option value="type_text">Type Text (Column Value)</option>
                         </select>
                         <span className="text-xs text-gray-500 flex-1">Action {ai + 1}</span>
+                        <button
+                          onClick={() => {
+                            const submitActions = [...(editingStep.config.submitActions as { type: string; value: string }[])];
+                            submitActions.splice(ai + 1, 0, { ...submitActions[ai] });
+                            setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                          }}
+                          className="text-green-400 hover:text-green-300 px-1 text-sm"
+                          title="Copy action"
+                        >
+                          📋
+                        </button>
                         <button
                           onClick={() => {
                             const submitActions = (editingStep.config.submitActions as { type: string; value: string }[]).filter((_, i) => i !== ai);
