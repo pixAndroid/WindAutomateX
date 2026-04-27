@@ -66,7 +66,10 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
   // Read column headers from an Excel or CSV file
   ipcMain.handle('dialog:readExcelHeaders', (_e, filePath: string, sheetName?: string) => {
     return new Promise<string[]>((resolve) => {
-      if (!filePath) { resolve([]); return; }
+      if (!filePath) {
+        resolve([]);
+        return;
+      }
       const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
       const settings = getSettings();
       const python = settings.python_path || pythonPath || 'python';
@@ -84,10 +87,15 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
               return;
             }
           }
-        } catch { /* ignore parse errors */ }
+        } catch (err) {
+          console.error('readExcelHeaders: failed to parse Python output:', err);
+        }
         resolve([]);
       });
-      proc.on('error', () => resolve([]));
+      proc.on('error', (err) => {
+        console.error('readExcelHeaders: process error:', err);
+        resolve([]);
+      });
     });
   });
 

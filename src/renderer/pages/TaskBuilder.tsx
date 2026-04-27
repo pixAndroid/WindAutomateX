@@ -88,12 +88,18 @@ const TaskBuilder: React.FC = () => {
   }, [id, isEdit]);
 
   useEffect(() => {
-    if (editingStep?.step.step_type !== 'excel_form_submit_loop') { setExcelColumns([]); return; }
+    if (editingStep?.step.step_type !== 'excel_form_submit_loop') {
+      setExcelColumns([]);
+      return;
+    }
     const filePath = String(editingStep.config.filePath ?? '').trim();
-    if (!filePath) { setExcelColumns([]); return; }
+    if (!filePath) {
+      setExcelColumns([]);
+      return;
+    }
     const sheetName = String(editingStep.config.sheetName ?? 'Sheet1');
     window.electronAPI.dialog.readExcelHeaders(filePath, sheetName).then(setExcelColumns).catch(() => setExcelColumns([]));
-  }, [editingStep?.config?.filePath, editingStep?.step.step_type]);
+  }, [editingStep?.config?.filePath, editingStep?.config?.sheetName, editingStep?.step.step_type]);
 
   const handleAddStep = () => {
     setEditingStep({
