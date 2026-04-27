@@ -2,10 +2,11 @@
 Executor: runs a list of task steps sequentially using the engine.
 
 When the task contains an ``excel_form_submit_loop`` step the executor
-switches to *outer-loop mode*: it loads the Excel rows defined in that step
-and executes **every** task step once per row.  This lets preparatory steps
-(e.g. launch_exe, click_coordinate) repeat alongside the form-filling step
-for each data row.
+switches to *loop mode*: it runs the steps that come before the loop step
+**once**, then iterates the ``excel_form_submit_loop`` step once per Excel
+data row, and finally runs any steps after the loop step **once**.  Main
+setup steps (e.g. launch_exe, click_coordinate) are therefore not repeated
+for every row.
 """
 import json
 import logging
@@ -34,8 +35,8 @@ class TaskExecutor:
         if not isinstance(steps, list):
             return {"status": "failed", "message": "Steps must be a list"}
 
-        # If the task contains an excel_form_submit_loop step, run every step
-        # once per Excel row (outer-loop mode).
+        # If the task contains an excel_form_submit_loop step, run pre/post
+        # steps once and iterate only the loop step per Excel row.
         loop_step_index = next(
             (i for i, s in enumerate(steps) if s.get("step_type") == "excel_form_submit_loop"),
             None,
@@ -82,18 +83,19 @@ class TaskExecutor:
         return {"status": "completed"}
 
     # ------------------------------------------------------------------
-    # Outer-loop (per-Excel-row) execution
+    # Loop (per-Excel-row) execution
     # ------------------------------------------------------------------
 
     def _run_with_excel_row_loop(self, task_id: int, steps: list, loop_step_index: int) -> dict:
         """
-        Execute every task step once per Excel row defined in the
-        ``excel_form_submit_loop`` step at *loop_step_index*.
+        Execute the task in loop mode:
 
-        For each row:
-        - Non-loop steps are executed normally via the engine.
-        - The ``excel_form_submit_loop`` step is executed as a single-row
-          form submission (field mappings + submit actions) for that row.
+        1. Run all steps **before** the ``excel_form_submit_loop`` step once.
+        2. Iterate the ``excel_form_submit_loop`` step once per Excel data row.
+        3. Run all steps **after** the loop step once.
+
+        Main setup steps (e.g. launch_exe, click_coordinate) are therefore
+        not repeated for every data row.
 
         The ``continueOnError`` and ``delayBetweenRows`` settings from the
         loop step's configuration are respected across rows.
@@ -101,6 +103,9 @@ class TaskExecutor:
         from excel_loop import load_excel_rows, run_excel_form_loop_for_row
 
         loop_step = steps[loop_step_index]
+        pre_steps = steps[:loop_step_index]
+        post_steps = steps[loop_step_index + 1:]
+
         try:
             loop_config = json.loads(loop_step.get("config_json", "{}") or "{}")
         except json.JSONDecodeError:
@@ -135,7 +140,7 @@ class TaskExecutor:
         total_rows = len(rows)
         total_steps = len(steps)
         logger.info(
-            f"Starting task {task_id} in outer-loop mode: {total_rows} rows × {total_steps} steps"
+            f"Starting task {task_id} in loop mode: {total_rows} rows, {total_steps} steps"
         )
         print(
             json.dumps({
@@ -147,6 +152,41 @@ class TaskExecutor:
             flush=True,
         )
 
+        # --- Phase 1: run pre-loop steps once ---
+        for step_idx, step in enumerate(pre_steps):
+            step_type = step.get("step_type", "unknown")
+            logger.info(f"Pre-loop Step {step_idx + 1}/{len(pre_steps)}: {step_type}")
+            print(
+                json.dumps({"event": "step_start", "step": step_idx + 1, "type": step_type}),
+                flush=True,
+            )
+
+            result = self.engine.execute_step(step)
+
+            print(
+                json.dumps({
+                    "event": "step_done",
+                    "step": step_idx + 1,
+                    "type": step_type,
+                    "success": result.get("success", False),
+                    "message": result.get("message", ""),
+                }),
+                flush=True,
+            )
+
+            if not result.get("success", False):
+                logger.error(f"Pre-loop step {step_idx + 1} failed: {result.get('message')}")
+                print(
+                    json.dumps({"status": "failed", "message": result.get("message", "Step failed")}),
+                    flush=True,
+                )
+                return {"status": "failed", "step": step_idx + 1, "message": result.get("message", "")}
+
+            self._apply_step_delay(step)
+
+        # --- Phase 2: loop the excel_form_submit_loop step per row ---
+        rows_succeeded = 0
+        rows_failed = 0
         for row_idx, row in enumerate(rows):
             logger.info(f"Row {row_idx + 1}/{total_rows}")
             print(
@@ -154,57 +194,49 @@ class TaskExecutor:
                 flush=True,
             )
 
-            row_failed = False
-            for step_idx, step in enumerate(steps):
-                step_type = step.get("step_type", "unknown")
-                logger.info(f"Row {row_idx + 1}, Step {step_idx + 1}/{total_steps}: {step_type}")
-                print(
-                    json.dumps({
-                        "event": "step_start",
-                        "step": step_idx + 1,
-                        "type": step_type,
-                        "row": row_idx + 1,
-                    }),
-                    flush=True,
-                )
+            step_type = loop_step.get("step_type", "excel_form_submit_loop")
+            print(
+                json.dumps({
+                    "event": "step_start",
+                    "step": loop_step_index + 1,
+                    "type": step_type,
+                    "row": row_idx + 1,
+                }),
+                flush=True,
+            )
 
-                if step_type == "excel_form_submit_loop":
-                    result = run_excel_form_loop_for_row(loop_config, row, row_idx, self.engine)
-                else:
-                    result = self.engine.execute_step(step)
+            result = run_excel_form_loop_for_row(loop_config, row, row_idx, self.engine)
 
-                print(
-                    json.dumps({
-                        "event": "step_done",
-                        "step": step_idx + 1,
-                        "type": step_type,
-                        "row": row_idx + 1,
-                        "success": result.get("success", False),
-                        "message": result.get("message", ""),
-                    }),
-                    flush=True,
-                )
+            print(
+                json.dumps({
+                    "event": "step_done",
+                    "step": loop_step_index + 1,
+                    "type": step_type,
+                    "row": row_idx + 1,
+                    "success": result.get("success", False),
+                    "message": result.get("message", ""),
+                }),
+                flush=True,
+            )
 
-                if not result.get("success", False):
-                    logger.error(
-                        f"Row {row_idx + 1}, Step {step_idx + 1} failed: {result.get('message')}"
+            row_failed = not result.get("success", False)
+            if row_failed:
+                rows_failed += 1
+                logger.error(f"Row {row_idx + 1} failed: {result.get('message')}")
+                if not continue_on_error:
+                    print(
+                        json.dumps({"status": "failed", "message": result.get("message", "Row failed")}),
+                        flush=True,
                     )
-                    row_failed = True
-                    if not continue_on_error:
-                        print(
-                            json.dumps({"status": "failed", "message": result.get("message", "Step failed")}),
-                            flush=True,
-                        )
-                        return {
-                            "status": "failed",
-                            "row": row_idx + 1,
-                            "step": step_idx + 1,
-                            "message": result.get("message", ""),
-                        }
-                    # Skip remaining steps in this row on failure
-                    break
+                    return {
+                        "status": "failed",
+                        "row": row_idx + 1,
+                        "step": loop_step_index + 1,
+                        "message": result.get("message", ""),
+                    }
 
-                self._apply_step_delay(step)
+            else:
+                rows_succeeded += 1
 
             print(
                 json.dumps({"event": "row_done", "row": row_idx + 1, "success": not row_failed}),
@@ -215,9 +247,51 @@ class TaskExecutor:
             if row_idx < total_rows - 1 and delay_between_rows > 0:
                 time.sleep(delay_between_rows / 1000.0)
 
-        logger.info(f"Task {task_id} completed successfully ({total_rows} rows)")
+        # --- Phase 3: run post-loop steps once ---
+        for step_idx, step in enumerate(post_steps):
+            global_step_idx = loop_step_index + 1 + step_idx
+            step_type = step.get("step_type", "unknown")
+            logger.info(f"Post-loop Step {step_idx + 1}/{len(post_steps)}: {step_type}")
+            print(
+                json.dumps({"event": "step_start", "step": global_step_idx + 1, "type": step_type}),
+                flush=True,
+            )
+
+            result = self.engine.execute_step(step)
+
+            print(
+                json.dumps({
+                    "event": "step_done",
+                    "step": global_step_idx + 1,
+                    "type": step_type,
+                    "success": result.get("success", False),
+                    "message": result.get("message", ""),
+                }),
+                flush=True,
+            )
+
+            if not result.get("success", False):
+                logger.error(f"Post-loop step {step_idx + 1} failed: {result.get('message')}")
+                print(
+                    json.dumps({"status": "failed", "message": result.get("message", "Step failed")}),
+                    flush=True,
+                )
+                return {"status": "failed", "step": global_step_idx + 1, "message": result.get("message", "")}
+
+            self._apply_step_delay(step)
+
+        logger.info(
+            f"Task {task_id} completed: {rows_succeeded}/{total_rows} rows succeeded, "
+            f"{rows_failed} failed"
+        )
         print(
-            json.dumps({"status": "completed", "task_id": task_id, "rows_run": total_rows}),
+            json.dumps({
+                "status": "completed",
+                "task_id": task_id,
+                "rows_run": total_rows,
+                "rows_succeeded": rows_succeeded,
+                "rows_failed": rows_failed,
+            }),
             flush=True,
         )
         return {"status": "completed"}
