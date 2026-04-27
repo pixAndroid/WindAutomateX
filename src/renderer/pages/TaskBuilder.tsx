@@ -753,6 +753,7 @@ const TaskBuilder: React.FC = () => {
                           <option value="coordinate">Coordinate Click</option>
                           <option value="keyboard">Keyboard Shortcut</option>
                           <option value="type_text">Type Text (Column Value)</option>
+                          <option value="delay">Delay</option>
                         </select>
                         <span className="text-xs text-gray-500 flex-1">Action {ai + 1}</span>
                         <button
@@ -843,6 +844,22 @@ const TaskBuilder: React.FC = () => {
                             </datalist>
                           )}
                         </div>
+                      ) : action.type === 'delay' ? (
+                        <div className="flex gap-2 items-center">
+                          <input
+                            type="number"
+                            min={0}
+                            value={action.value === '' ? '' : Number(action.value) || 0}
+                            onChange={(e) => {
+                              const submitActions = [...(editingStep.config.submitActions as { type: string; value: string }[])];
+                              submitActions[ai] = { ...submitActions[ai], value: e.target.value };
+                              setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                            }}
+                            placeholder="1000"
+                            className="w-32 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                          />
+                          <span className="text-xs text-gray-400">ms</span>
+                        </div>
                       ) : (
                         <div className="flex gap-2 items-center">
                           <input
@@ -908,7 +925,7 @@ const TaskBuilder: React.FC = () => {
                     + Add Submit Action
                   </button>
                   <p className="text-xs text-gray-500">
-                    Add coordinate clicks, keyboard shortcuts, or "Type Text (Column Value)" actions to execute when submitting each row.
+                    Add coordinate clicks, keyboard shortcuts, "Type Text (Column Value)", or "Delay" actions to execute when submitting each row.
                   </p>
                 </div>
                 <div className="flex gap-3">
