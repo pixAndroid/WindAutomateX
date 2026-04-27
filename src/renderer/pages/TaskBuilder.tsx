@@ -722,7 +722,7 @@ const TaskBuilder: React.FC = () => {
                       key={ai}
                       draggable
                       onDragStart={() => setDragActionIndex(ai)}
-                      onDragOver={(e) => { e.preventDefault(); setDragOverActionIndex(ai); }}
+                      onDragOver={(e) => { e.preventDefault(); if (dragOverActionIndex !== ai) setDragOverActionIndex(ai); }}
                       onDrop={() => {
                         if (dragActionIndex === null || dragActionIndex === ai) return;
                         const submitActions = [...(editingStep.config.submitActions as { type: string; value: string }[])];
@@ -740,7 +740,7 @@ const TaskBuilder: React.FC = () => {
                       ].join(' ')}
                     >
                       <div className="flex gap-2 items-center">
-                        <span className="text-gray-500 text-xs select-none">⠿</span>
+                        <span className="text-gray-500 text-xs select-none" aria-label="Drag to reorder">⠿</span>
                         <select
                           value={action.type}
                           onChange={(e) => {
@@ -762,6 +762,7 @@ const TaskBuilder: React.FC = () => {
                             setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
                           }}
                           className="text-green-400 hover:text-green-300 px-1 text-sm"
+                          aria-label="Copy action"
                           title="Copy action"
                         >
                           📋
