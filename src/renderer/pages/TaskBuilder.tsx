@@ -58,7 +58,7 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
     resumeFromLastRow: false,
     delay: 60,
   },
-  detect_image: { template_path: '', threshold: 0.85, output_var: 'detected', delay: 60 },
+  detect_image: { template_path: '', threshold: 0.85, output_var: 'detected', on_success_task_id: '', on_failure_task_id: '', delay: 60 },
   run_task: { task_id: '', delay: 60 },
 };
 
@@ -1154,6 +1154,57 @@ const TaskBuilder: React.FC = () => {
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
                     Restrict template search to this screen region. Width and Height must be &gt; 0 to apply.
+                  </p>
+                </div>
+
+                {/* On Success / On Failure task linking */}
+                <div>
+                  <p className="text-xs font-semibold text-green-400 uppercase tracking-wider mb-2">On Success — Run Task (optional)</p>
+                  <select
+                    value={String(editingStep.config.on_success_task_id ?? '')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, on_success_task_id: e.target.value } } : null
+                      )
+                    }
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500"
+                  >
+                    <option value="">— None —</option>
+                    {allTasks
+                      .filter((t) => String(t.id) !== id)
+                      .map((t) => (
+                        <option key={t.id} value={String(t.id)}>
+                          {t.name} (#{t.id})
+                        </option>
+                      ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Task to run when the image <strong className="text-gray-400">is found</strong>. Leave blank to continue to the next step.
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">On Failure — Run Task (optional)</p>
+                  <select
+                    value={String(editingStep.config.on_failure_task_id ?? '')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, on_failure_task_id: e.target.value } } : null
+                      )
+                    }
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
+                  >
+                    <option value="">— None —</option>
+                    {allTasks
+                      .filter((t) => String(t.id) !== id)
+                      .map((t) => (
+                        <option key={t.id} value={String(t.id)}>
+                          {t.name} (#{t.id})
+                        </option>
+                      ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Task to run when the image is <strong className="text-gray-400">not found</strong>. Leave blank to continue to the next step.
                   </p>
                 </div>
               </>

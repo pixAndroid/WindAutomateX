@@ -331,10 +331,12 @@ class WindAutomateXEngine:
         Perform full-screen template matching using OpenCV.
 
         Config keys:
-          template_path (str)  – path to the reference image file.
-          threshold     (float) – match confidence threshold (default 0.85).
-          region        (dict)  – optional {x, y, width, height} to limit the search area.
-          output_var    (str)  – optional variable name to store the boolean match result.
+          template_path      (str)   – path to the reference image file.
+          threshold          (float) – match confidence threshold (default 0.85).
+          region             (dict)  – optional {x, y, width, height} to limit the search area.
+          output_var         (str)   – optional variable name to store the boolean match result.
+          on_success_task_id (str)   – optional task ID to run when the image is found.
+          on_failure_task_id (str)   – optional task ID to run when the image is not found.
 
         Returns:
           success: True  (unless a real error occurs such as missing template or OpenCV not installed)
@@ -418,6 +420,22 @@ class WindAutomateXEngine:
             # Store result in engine variable if requested
             if output_var:
                 self.variables[output_var] = str(matched).lower()
+
+            # Run linked success or failure task if configured
+            if matched:
+                linked_task_id = config.get("on_success_task_id", "")
+            else:
+                linked_task_id = config.get("on_failure_task_id", "")
+
+            if linked_task_id and str(linked_task_id).strip():
+                task_result = self._run_task({"task_id": linked_task_id})
+                if not task_result.get("success", False):
+                    return {
+                        "success": False,
+                        "matched": matched,
+                        "score": response["score"],
+                        "message": task_result.get("message", "Linked task failed"),
+                    }
 
             return response
 
