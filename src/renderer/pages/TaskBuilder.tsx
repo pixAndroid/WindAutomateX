@@ -556,52 +556,104 @@ const TaskBuilder: React.FC = () => {
                 <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider pt-1">Field Mappings</p>
                 <div className="space-y-2">
                   {(editingStep.config.mappings as { column: string; selector: string; inputType: string }[]).map((m, mi) => (
-                    <div key={mi} className="flex gap-2 items-center">
-                      <input
-                        type="text"
-                        value={m.column}
-                        onChange={(e) => {
-                          const mappings = [...(editingStep.config.mappings as { column: string; selector: string; inputType: string }[])];
-                          mappings[mi] = { ...mappings[mi], column: e.target.value };
-                          setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
-                        }}
-                        placeholder="Excel Column"
-                        className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
-                      />
-                      <input
-                        type="text"
-                        value={m.selector}
-                        onChange={(e) => {
-                          const mappings = [...(editingStep.config.mappings as { column: string; selector: string; inputType: string }[])];
-                          mappings[mi] = { ...mappings[mi], selector: e.target.value };
-                          setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
-                        }}
-                        placeholder="Field Selector"
-                        className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
-                      />
-                      <select
-                        value={m.inputType}
-                        onChange={(e) => {
-                          const mappings = [...(editingStep.config.mappings as { column: string; selector: string; inputType: string }[])];
-                          mappings[mi] = { ...mappings[mi], inputType: e.target.value };
-                          setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
-                        }}
-                        className="bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
-                      >
-                        <option value="text">text</option>
-                        <option value="dropdown">dropdown</option>
-                        <option value="checkbox">checkbox</option>
-                      </select>
-                      <button
-                        onClick={() => {
-                          const mappings = (editingStep.config.mappings as { column: string; selector: string; inputType: string }[]).filter((_, i) => i !== mi);
-                          setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
-                        }}
-                        className="text-red-400 hover:text-red-300 px-1 text-sm"
-                        title="Remove mapping"
-                      >
-                        ✕
-                      </button>
+                    <div key={mi} className="flex flex-col gap-1">
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          value={m.column}
+                          onChange={(e) => {
+                            const mappings = [...(editingStep.config.mappings as { column: string; selector: string; inputType: string }[])];
+                            mappings[mi] = { ...mappings[mi], column: e.target.value };
+                            setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
+                          }}
+                          placeholder="Excel Column"
+                          className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                        />
+                        <select
+                          value={m.inputType}
+                          onChange={(e) => {
+                            const mappings = [...(editingStep.config.mappings as { column: string; selector: string; inputType: string }[])];
+                            mappings[mi] = { ...mappings[mi], inputType: e.target.value, selector: '' };
+                            setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
+                          }}
+                          className="bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="text">text</option>
+                          <option value="dropdown">dropdown</option>
+                          <option value="checkbox">checkbox</option>
+                          <option value="coordinate">coordinate</option>
+                        </select>
+                        <button
+                          onClick={() => {
+                            const mappings = (editingStep.config.mappings as { column: string; selector: string; inputType: string }[]).filter((_, i) => i !== mi);
+                            setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
+                          }}
+                          className="text-red-400 hover:text-red-300 px-1 text-sm"
+                          title="Remove mapping"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      {m.inputType === 'coordinate' ? (
+                        <div className="flex gap-2 items-center pl-1">
+                          <input
+                            type="number"
+                            value={m.selector ? (parseInt(m.selector.split(',')[0], 10) || 0) : 0}
+                            onChange={(e) => {
+                              const mappings = [...(editingStep.config.mappings as { column: string; selector: string; inputType: string }[])];
+                              const parts = (mappings[mi].selector || '0,0').split(',');
+                              parts[0] = e.target.value;
+                              mappings[mi] = { ...mappings[mi], selector: parts.join(',') };
+                              setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
+                            }}
+                            placeholder="X"
+                            className="w-20 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                          />
+                          <input
+                            type="number"
+                            value={m.selector ? (parseInt(m.selector.split(',')[1] ?? '0', 10) || 0) : 0}
+                            onChange={(e) => {
+                              const mappings = [...(editingStep.config.mappings as { column: string; selector: string; inputType: string }[])];
+                              const parts = (mappings[mi].selector || '0,0').split(',');
+                              parts[1] = e.target.value;
+                              mappings[mi] = { ...mappings[mi], selector: parts.join(',') };
+                              setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
+                            }}
+                            placeholder="Y"
+                            className="w-20 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                          />
+                          <button
+                            onClick={async () => {
+                              const coords = await window.electronAPI.picker.coordinate();
+                              if (coords) {
+                                const mappings = [...(editingStep.config.mappings as { column: string; selector: string; inputType: string }[])];
+                                mappings[mi] = { ...mappings[mi], selector: `${coords.x},${coords.y}` };
+                                setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
+                              }
+                            }}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1.5 rounded-lg text-xs flex items-center gap-1 whitespace-nowrap"
+                          >
+                            🎯 Pick
+                          </button>
+                          <span className="text-xs text-gray-500">
+                            {m.selector ? `(${m.selector})` : 'not set'}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="pl-1">
+                          <input
+                            type="text"
+                            value={m.selector}
+                            onChange={(e) => {
+                              const mappings = [...(editingStep.config.mappings as { column: string; selector: string; inputType: string }[])];
+                              mappings[mi] = { ...mappings[mi], selector: e.target.value };
+                              setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
+                            }}
+                            placeholder="Field Selector (auto_id or title)"
+                            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                   <button
@@ -619,13 +671,30 @@ const TaskBuilder: React.FC = () => {
                 <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider pt-1">Submit Action</p>
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Submit Button Selector</label>
-                  <input
-                    type="text"
-                    value={String(editingStep.config.submitSelector ?? '')}
-                    onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitSelector: e.target.value } } : null)}
-                    placeholder="submit_btn"
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={String(editingStep.config.submitSelector ?? '')}
+                      onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitSelector: e.target.value } } : null)}
+                      placeholder="submit_btn or x,y coordinate"
+                      className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      onClick={async () => {
+                        const coords = await window.electronAPI.picker.coordinate();
+                        if (coords) {
+                          setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitSelector: `${coords.x},${coords.y}` } } : null);
+                        }
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap"
+                      title="Pick submit button location from screen"
+                    >
+                      🎯 Pick
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter an element auto_id / title, or click 🎯 Pick to capture the button's screen coordinates.
+                  </p>
                 </div>
                 <div className="flex gap-3">
                   <div className="flex-1">
