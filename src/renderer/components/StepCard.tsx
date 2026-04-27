@@ -22,6 +22,8 @@ const stepIcons: Record<StepType, string> = {
   close_app: '❌',
   kill_process: '💀',
   excel_form_submit_loop: '📊',
+  detect_image: '🔍',
+  run_task: '▶️',
 };
 
 const stepLabels: Record<StepType, string> = {
@@ -45,6 +47,8 @@ const stepLabels: Record<StepType, string> = {
   close_app: 'Close App',
   kill_process: 'Kill Process',
   excel_form_submit_loop: 'Excel Form Submit Loop',
+  detect_image: 'Detect Image (Window)',
+  run_task: 'Run Linked Task',
 };
 
 interface StepCardProps {

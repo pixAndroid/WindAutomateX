@@ -19,12 +19,14 @@ _WINDOW_SETTLE_DELAY_SECONDS = 0.3
 class WindAutomateXEngine:
     def __init__(self):
         self.variables: dict = {}
+        self.all_tasks: dict = {}  # task_id (str) -> list of step dicts for run_task support
         self._try_import_libraries()
 
     def _try_import_libraries(self):
         """Try to import optional automation libraries."""
         self.pywinauto_available = False
         self.pyautogui_available = False
+        self.cv2_available = False
 
         try:
             import pywinauto  # noqa: F401
@@ -37,6 +39,12 @@ class WindAutomateXEngine:
             self.pyautogui_available = True
         except ImportError:
             logger.warning("pyautogui not available")
+
+        try:
+            import cv2  # noqa: F401
+            self.cv2_available = True
+        except ImportError:
+            logger.warning("opencv (cv2) not available — detect_image step will not work")
 
     def execute_step(self, step: dict) -> dict:
         """Execute a single automation step. Returns {success, message}."""
@@ -71,6 +79,8 @@ class WindAutomateXEngine:
             "close_app": self._close_app,
             "kill_process": self._kill_process,
             "excel_form_submit_loop": self._excel_form_submit_loop,
+            "detect_image": self._detect_image,
+            "run_task": self._run_task,
         }
 
         handler = handlers.get(step_type)
@@ -315,3 +325,162 @@ class WindAutomateXEngine:
     def _excel_form_submit_loop(self, config: dict) -> dict:
         from excel_loop import run_excel_form_loop
         return run_excel_form_loop(config, self)
+
+    def _detect_image(self, config: dict) -> dict:
+        """
+        Perform full-screen template matching using OpenCV.
+
+        Config keys:
+          template_path (str)  – path to the reference image file.
+          threshold     (float) – match confidence threshold (default 0.85).
+          region        (dict)  – optional {x, y, width, height} to limit the search area.
+          output_var    (str)  – optional variable name to store the boolean match result.
+
+        Returns:
+          success: True  (unless a real error occurs such as missing template or OpenCV not installed)
+          matched: bool
+          score:   float  – best normalised match score (0.0–1.0)
+          found:   dict   – {x, y, w, h} of the best match location (present when matched is True)
+        """
+        if not self.cv2_available:
+            return {
+                "success": False,
+                "message": (
+                    "detect_image: OpenCV (cv2) is not installed. "
+                    "Run: pip install opencv-python-headless"
+                ),
+            }
+
+        if not self.pyautogui_available:
+            return {"success": False, "message": "detect_image: pyautogui is not available for screenshot"}
+
+        import cv2
+        import numpy as np
+        import pyautogui
+
+        template_path = config.get("template_path", "")
+        if not template_path:
+            return {"success": False, "message": "detect_image: template_path is required"}
+
+        if not os.path.isfile(template_path):
+            return {"success": False, "message": f"detect_image: template file not found: {template_path}"}
+
+        threshold = float(config.get("threshold", 0.85))
+        output_var = config.get("output_var", "")
+        region_cfg = config.get("region")
+
+        try:
+            # Take screenshot (full screen or restricted region)
+            if region_cfg and isinstance(region_cfg, dict):
+                rx = int(region_cfg.get("x", 0))
+                ry = int(region_cfg.get("y", 0))
+                rw = int(region_cfg.get("width", 0))
+                rh = int(region_cfg.get("height", 0))
+                if rw > 0 and rh > 0:
+                    pil_img = pyautogui.screenshot(region=(rx, ry, rw, rh))
+                else:
+                    pil_img = pyautogui.screenshot()
+            else:
+                pil_img = pyautogui.screenshot()
+
+            # Convert PIL image to OpenCV BGR
+            screen_np = np.array(pil_img)
+            screen_bgr = cv2.cvtColor(screen_np, cv2.COLOR_RGB2BGR)
+
+            # Load template image
+            template_bgr = cv2.imread(template_path, cv2.IMREAD_COLOR)
+            if template_bgr is None:
+                return {"success": False, "message": f"detect_image: failed to load template: {template_path}"}
+
+            # Run template matching (normalised cross-correlation)
+            result_mat = cv2.matchTemplate(screen_bgr, template_bgr, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(result_mat)
+
+            score = float(max_val)
+            matched = score >= threshold
+
+            response: dict = {
+                "success": True,
+                "matched": matched,
+                "score": round(score, 4),
+                "message": f"detect_image {'matched' if matched else 'not matched'} (score={score:.4f})",
+            }
+
+            if matched:
+                th, tw = template_bgr.shape[:2]
+                response["found"] = {
+                    "x": max_loc[0],
+                    "y": max_loc[1],
+                    "w": tw,
+                    "h": th,
+                }
+
+            # Store result in engine variable if requested
+            if output_var:
+                self.variables[output_var] = str(matched).lower()
+
+            return response
+
+        except Exception as e:
+            logger.error(f"detect_image error: {e}")
+            return {"success": False, "message": f"detect_image error: {e}"}
+
+    def _run_task(self, config: dict) -> dict:
+        """
+        Execute a linked child task and wait for it to finish before returning.
+
+        Config keys:
+          task_id (int|str) – the ID of the task to run.
+
+        The child task's steps are looked up from ``self.all_tasks`` which is
+        populated by the executor before execution begins.  If the child task
+        is not found in the map the step fails immediately.
+        """
+        task_id_raw = config.get("task_id", "")
+        if not task_id_raw and task_id_raw != 0:
+            return {"success": False, "message": "run_task: task_id is required"}
+
+        task_id_str = str(task_id_raw)
+        child_steps = self.all_tasks.get(task_id_str)
+        if child_steps is None:
+            return {
+                "success": False,
+                "message": (
+                    f"run_task: task {task_id_str} not found. "
+                    "Make sure the task exists and was saved before running the parent task."
+                ),
+            }
+
+        total = len(child_steps)
+        logger.info(f"run_task: starting child task {task_id_str} ({total} steps)")
+
+        for i, step in enumerate(child_steps):
+            step_type = step.get("step_type", "unknown")
+            logger.info(f"run_task: child task {task_id_str} step {i + 1}/{total}: {step_type}")
+            result = self.execute_step(step)
+            if not result.get("success", False):
+                logger.error(
+                    f"run_task: child task {task_id_str} failed at step {i + 1}: {result.get('message')}"
+                )
+                return {
+                    "success": False,
+                    "message": (
+                        f"Linked task {task_id_str} failed at step {i + 1} ({step_type}): "
+                        f"{result.get('message', '')}"
+                    ),
+                }
+
+            # Apply per-step delay for the child step
+            try:
+                child_config = json.loads(step.get("config_json", "{}") or "{}")
+            except json.JSONDecodeError:
+                child_config = {}
+            delay_ms = int(child_config.get("delay", 60))
+            if delay_ms > 0:
+                time.sleep(delay_ms / 1000.0)
+
+        logger.info(f"run_task: child task {task_id_str} completed ({total} steps)")
+        return {
+            "success": True,
+            "message": f"Linked task {task_id_str} completed successfully ({total} steps)",
+        }

@@ -25,7 +25,7 @@ class TaskExecutor:
     # Public entry-point
     # ------------------------------------------------------------------
 
-    def execute(self, task_id: int, steps_json: str) -> dict:
+    def execute(self, task_id: int, steps_json: str, all_tasks: dict | None = None) -> dict:
         """Execute all steps for a task. Returns final status dict."""
         try:
             steps = json.loads(steps_json)
@@ -34,6 +34,10 @@ class TaskExecutor:
 
         if not isinstance(steps, list):
             return {"status": "failed", "message": "Steps must be a list"}
+
+        # Propagate the all_tasks map so run_task steps can resolve child tasks
+        if all_tasks:
+            self.engine.all_tasks = all_tasks
 
         # If the task contains an excel_form_submit_loop step, run pre/post
         # steps once and iterate only the loop step per Excel row.

@@ -44,6 +44,7 @@ const api: ElectronAPI = {
   dialog: {
     openFile: () => ipcRenderer.invoke('dialog:openFile'),
     openExcelFile: () => ipcRenderer.invoke('dialog:openExcelFile'),
+    openImageFile: () => ipcRenderer.invoke('dialog:openImageFile'),
     readExcelHeaders: (filePath: string, sheetName?: string) => ipcRenderer.invoke('dialog:readExcelHeaders', filePath, sheetName),
   },
   picker: {
