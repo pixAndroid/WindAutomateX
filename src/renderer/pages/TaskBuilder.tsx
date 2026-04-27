@@ -5,6 +5,13 @@ import StepCard from '../components/StepCard';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 
+const ACTION_TYPE_COLORS: Record<string, { border: string; label: string }> = {
+  coordinate: { border: 'border-purple-500', label: 'text-purple-400' },
+  keyboard:   { border: 'border-yellow-500', label: 'text-yellow-400' },
+  type_text:  { border: 'border-green-500',  label: 'text-green-400'  },
+  delay:      { border: 'border-orange-500', label: 'text-orange-400' },
+};
+
 const ALL_STEP_TYPES: StepType[] = [
   'launch_exe', 'wait_window', 'click_element', 'click_coordinate',
   'type_text', 'press_key', 'keyboard_shortcut', 'select_dropdown', 'upload_file',
@@ -736,7 +743,9 @@ const TaskBuilder: React.FC = () => {
                       className={[
                         'flex flex-col gap-1 bg-gray-750 rounded-lg p-2 border cursor-grab active:cursor-grabbing transition-opacity',
                         dragActionIndex === ai ? 'opacity-40' : 'opacity-100',
-                        dragOverActionIndex === ai && dragActionIndex !== ai ? 'border-blue-500' : 'border-gray-600',
+                        dragOverActionIndex === ai && dragActionIndex !== ai
+                          ? 'border-blue-500'
+                          : (ACTION_TYPE_COLORS[action.type]?.border ?? 'border-gray-600'),
                       ].join(' ')}
                     >
                       <div className="flex gap-2 items-center">
@@ -755,7 +764,7 @@ const TaskBuilder: React.FC = () => {
                           <option value="type_text">Type Text (Column Value)</option>
                           <option value="delay">Delay</option>
                         </select>
-                        <span className="text-xs text-gray-500 flex-1">Action {ai + 1}</span>
+                        <span className={`text-xs flex-1 font-semibold ${ACTION_TYPE_COLORS[action.type]?.label ?? 'text-gray-500'}`}>Action {ai + 1}</span>
                         <button
                           onClick={() => {
                             const submitActions = [...(editingStep.config.submitActions as { type: string; value: string }[])];
