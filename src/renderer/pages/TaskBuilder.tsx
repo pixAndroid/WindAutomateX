@@ -1064,9 +1064,23 @@ const TaskBuilder: React.FC = () => {
                     >
                       Browse…
                     </button>
+                    <button
+                      onClick={async () => {
+                        const fp = await window.electronAPI.picker.captureScreen();
+                        if (fp) {
+                          setEditingStep((prev) =>
+                            prev ? { ...prev, config: { ...prev.config, template_path: fp } } : null
+                          );
+                        }
+                      }}
+                      title="Choose a save location, then the window minimizes for 3 s so you can navigate to the target screen before the screenshot is taken."
+                      className="bg-blue-700 hover:bg-blue-600 text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap"
+                    >
+                      📸 Capture
+                    </button>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    Select a reference screenshot of the expected window/screen. Use a PNG or JPG file.
+                    Browse for an existing PNG/JPG, or click <strong className="text-gray-400">📸 Capture</strong> to screenshot the target screen now (window minimizes for 3 s so you can navigate to it first).
                   </p>
                 </div>
 

@@ -49,6 +49,7 @@ const api: ElectronAPI = {
   },
   picker: {
     coordinate: () => ipcRenderer.invoke('picker:coordinate'),
+    captureScreen: () => ipcRenderer.invoke('picker:captureScreen'),
   },
 };
 

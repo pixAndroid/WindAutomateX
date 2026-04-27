@@ -45,6 +45,17 @@ def main():
                 print(json.dumps({"status": "ok", "headers": headers}), flush=True)
             except Exception as e:
                 print(json.dumps({"status": "failed", "message": str(e)}), flush=True)
+        elif command == "capture_screenshot":
+            save_path = msg.get("save_path", "")
+            if not save_path:
+                print(json.dumps({"status": "failed", "message": "capture_screenshot: save_path is required"}), flush=True)
+                continue
+            try:
+                import pyautogui
+                pyautogui.screenshot(save_path)
+                print(json.dumps({"status": "ok", "path": save_path}), flush=True)
+            except Exception as e:
+                print(json.dumps({"status": "failed", "message": str(e)}), flush=True)
         elif command == "ping":
             print(json.dumps({"status": "pong"}), flush=True)
         else:

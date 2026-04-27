@@ -107,6 +107,7 @@ export interface ElectronAPI {
   };
   picker: {
     coordinate: () => Promise<{ x: number; y: number } | null>;
+    captureScreen: () => Promise<string | null>;
   };
 }
 
