@@ -500,6 +500,62 @@ def process_row(
 # Main entry-point
 # ---------------------------------------------------------------------------
 
+def run_excel_form_loop_for_row(config: dict, row: dict, row_index: int, engine) -> dict:
+    """
+    Execute the Excel Form Submit Loop for a single pre-loaded *row*.
+
+    Called by the executor when running in outer-loop mode — i.e. when every
+    task step (not just the form-filling step) repeats once per Excel row.
+    Unlike :func:`run_excel_form_loop`, this variant does **not** load or
+    iterate over the Excel file; it receives the already-loaded row dict and
+    its 0-based *row_index*.
+
+    At least one submit action must still be configured; field *mappings* are
+    optional (they may be empty when the calling task handles input via other
+    step types).
+
+    Parameters
+    ----------
+    config : dict
+        Parsed ``config_json`` from the ``excel_form_submit_loop`` task step.
+    row : dict
+        Column-name → cell-value mapping for the current Excel row.
+    row_index : int
+        0-based index of *row* within the loaded data rows (used for logging
+        and screenshot file-names).
+    engine : WindAutomateXEngine
+        Shared engine instance.
+
+    Returns
+    -------
+    dict
+        ``{"success": bool, "message": str}``
+    """
+    submit_actions = config.get("submitActions") or []
+    if not submit_actions and not config.get("submitSelector"):
+        return {"success": False, "message": "At least one submit action is required"}
+
+    retry_count: int = int(config.get("retryCount", 2))
+    save_screenshot: bool = bool(config.get("saveScreenshotOnFailure", False))
+    file_path: str = config.get("filePath", "")
+
+    result = None
+    for attempt in range(retry_count + 1):
+        result = process_row(row, row_index, config, engine)
+        if result["success"]:
+            break
+        if attempt < retry_count:
+            logger.warning(
+                f"Row {row_index + 1} attempt {attempt + 1} failed: {result['message']} — retrying…"
+            )
+            time.sleep(0.5)
+
+    if result and not result["success"] and save_screenshot and file_path:
+        _take_screenshot(row_index, file_path, engine)
+
+    return result if result else {"success": False, "message": "Unknown error"}
+
+
 def run_excel_form_loop(config: dict, engine) -> dict:
     """
     Execute the full Excel Form Submit Loop step.

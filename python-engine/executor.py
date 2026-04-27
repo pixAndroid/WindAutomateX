@@ -1,9 +1,14 @@
 """
 Executor: runs a list of task steps sequentially using the engine.
+
+When the task contains an ``excel_form_submit_loop`` step the executor
+switches to *outer-loop mode*: it loads the Excel rows defined in that step
+and executes **every** task step once per row.  This lets preparatory steps
+(e.g. launch_exe, click_coordinate) repeat alongside the form-filling step
+for each data row.
 """
 import json
 import logging
-import sys
 import time
 
 from engine import WindAutomateXEngine
@@ -15,6 +20,10 @@ class TaskExecutor:
     def __init__(self):
         self.engine = WindAutomateXEngine()
 
+    # ------------------------------------------------------------------
+    # Public entry-point
+    # ------------------------------------------------------------------
+
     def execute(self, task_id: int, steps_json: str) -> dict:
         """Execute all steps for a task. Returns final status dict."""
         try:
@@ -25,6 +34,23 @@ class TaskExecutor:
         if not isinstance(steps, list):
             return {"status": "failed", "message": "Steps must be a list"}
 
+        # If the task contains an excel_form_submit_loop step, run every step
+        # once per Excel row (outer-loop mode).
+        loop_step_index = next(
+            (i for i, s in enumerate(steps) if s.get("step_type") == "excel_form_submit_loop"),
+            None,
+        )
+        if loop_step_index is not None:
+            return self._run_with_excel_row_loop(task_id, steps, loop_step_index)
+
+        return self._run_sequential(task_id, steps)
+
+    # ------------------------------------------------------------------
+    # Sequential (no Excel loop) execution
+    # ------------------------------------------------------------------
+
+    def _run_sequential(self, task_id: int, steps: list) -> dict:
+        """Run all steps in order, stopping on the first failure."""
         total = len(steps)
         logger.info(f"Starting task {task_id} with {total} steps")
         print(json.dumps({"event": "start", "task_id": task_id, "total_steps": total}), flush=True)
@@ -49,17 +75,167 @@ class TaskExecutor:
                 print(json.dumps({"status": "failed", "message": result.get("message", "Step failed")}), flush=True)
                 return {"status": "failed", "step": i + 1, "message": result.get("message", "")}
 
-            try:
-                config = json.loads(step.get("config_json", "{}") or "{}")
-            except json.JSONDecodeError:
-                config = {}
-            try:
-                delay_ms = int(config.get("delay", 60))
-            except (TypeError, ValueError):
-                delay_ms = 60
-            if delay_ms > 0:
-                time.sleep(delay_ms / 1000.0)
+            self._apply_step_delay(step)
 
         logger.info(f"Task {task_id} completed successfully")
         print(json.dumps({"status": "completed", "task_id": task_id, "steps_run": total}), flush=True)
         return {"status": "completed"}
+
+    # ------------------------------------------------------------------
+    # Outer-loop (per-Excel-row) execution
+    # ------------------------------------------------------------------
+
+    def _run_with_excel_row_loop(self, task_id: int, steps: list, loop_step_index: int) -> dict:
+        """
+        Execute every task step once per Excel row defined in the
+        ``excel_form_submit_loop`` step at *loop_step_index*.
+
+        For each row:
+        - Non-loop steps are executed normally via the engine.
+        - The ``excel_form_submit_loop`` step is executed as a single-row
+          form submission (field mappings + submit actions) for that row.
+
+        The ``continueOnError`` and ``delayBetweenRows`` settings from the
+        loop step's configuration are respected across rows.
+        """
+        from excel_loop import load_excel_rows, run_excel_form_loop_for_row
+
+        loop_step = steps[loop_step_index]
+        try:
+            loop_config = json.loads(loop_step.get("config_json", "{}") or "{}")
+        except json.JSONDecodeError:
+            loop_config = {}
+
+        file_path: str = loop_config.get("filePath", "")
+        if not file_path:
+            msg = "excel_form_submit_loop: filePath is required"
+            print(json.dumps({"status": "failed", "message": msg}), flush=True)
+            return {"status": "failed", "message": msg}
+
+        sheet_name: str = loop_config.get("sheetName", "Sheet1")
+        has_header: bool = bool(loop_config.get("hasHeader", True))
+        start_row: int = int(loop_config.get("startRow", 2))
+        end_row_raw = loop_config.get("endRow")
+        end_row: int | None = int(end_row_raw) if end_row_raw is not None else None
+        continue_on_error: bool = bool(loop_config.get("continueOnError", True))
+        delay_between_rows: int = int(loop_config.get("delayBetweenRows", 1000))
+
+        try:
+            rows = load_excel_rows(file_path, sheet_name, has_header, start_row, end_row)
+        except Exception as e:
+            msg = f"excel_form_submit_loop: Failed to load file: {e}"
+            print(json.dumps({"status": "failed", "message": msg}), flush=True)
+            return {"status": "failed", "message": msg}
+
+        if not rows:
+            msg = "excel_form_submit_loop: No data rows found in the specified range"
+            print(json.dumps({"status": "failed", "message": msg}), flush=True)
+            return {"status": "failed", "message": msg}
+
+        total_rows = len(rows)
+        total_steps = len(steps)
+        logger.info(
+            f"Starting task {task_id} in outer-loop mode: {total_rows} rows × {total_steps} steps"
+        )
+        print(
+            json.dumps({
+                "event": "start",
+                "task_id": task_id,
+                "total_steps": total_steps,
+                "total_rows": total_rows,
+            }),
+            flush=True,
+        )
+
+        for row_idx, row in enumerate(rows):
+            logger.info(f"Row {row_idx + 1}/{total_rows}")
+            print(
+                json.dumps({"event": "row_start", "row": row_idx + 1, "total_rows": total_rows}),
+                flush=True,
+            )
+
+            row_failed = False
+            for step_idx, step in enumerate(steps):
+                step_type = step.get("step_type", "unknown")
+                logger.info(f"Row {row_idx + 1}, Step {step_idx + 1}/{total_steps}: {step_type}")
+                print(
+                    json.dumps({
+                        "event": "step_start",
+                        "step": step_idx + 1,
+                        "type": step_type,
+                        "row": row_idx + 1,
+                    }),
+                    flush=True,
+                )
+
+                if step_type == "excel_form_submit_loop":
+                    result = run_excel_form_loop_for_row(loop_config, row, row_idx, self.engine)
+                else:
+                    result = self.engine.execute_step(step)
+
+                print(
+                    json.dumps({
+                        "event": "step_done",
+                        "step": step_idx + 1,
+                        "type": step_type,
+                        "row": row_idx + 1,
+                        "success": result.get("success", False),
+                        "message": result.get("message", ""),
+                    }),
+                    flush=True,
+                )
+
+                if not result.get("success", False):
+                    logger.error(
+                        f"Row {row_idx + 1}, Step {step_idx + 1} failed: {result.get('message')}"
+                    )
+                    row_failed = True
+                    if not continue_on_error:
+                        print(
+                            json.dumps({"status": "failed", "message": result.get("message", "Step failed")}),
+                            flush=True,
+                        )
+                        return {
+                            "status": "failed",
+                            "row": row_idx + 1,
+                            "step": step_idx + 1,
+                            "message": result.get("message", ""),
+                        }
+                    # Skip remaining steps in this row on failure
+                    break
+
+                self._apply_step_delay(step)
+
+            print(
+                json.dumps({"event": "row_done", "row": row_idx + 1, "success": not row_failed}),
+                flush=True,
+            )
+
+            # Delay between rows (skip after the last row)
+            if row_idx < total_rows - 1 and delay_between_rows > 0:
+                time.sleep(delay_between_rows / 1000.0)
+
+        logger.info(f"Task {task_id} completed successfully ({total_rows} rows)")
+        print(
+            json.dumps({"status": "completed", "task_id": task_id, "rows_run": total_rows}),
+            flush=True,
+        )
+        return {"status": "completed"}
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _apply_step_delay(step: dict) -> None:
+        """Sleep for the per-step delay configured in *step*'s config_json."""
+        try:
+            config = json.loads(step.get("config_json", "{}") or "{}")
+        except json.JSONDecodeError:
+            config = {}
+        try:
+            delay_ms = int(config.get("delay", 60))
+        except (TypeError, ValueError):
+            delay_ms = 60
+        if delay_ms > 0:
+            time.sleep(delay_ms / 1000.0)
