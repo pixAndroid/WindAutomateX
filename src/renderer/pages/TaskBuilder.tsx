@@ -40,7 +40,7 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
     startRow: 2,
     endRow: null,
     mappings: [] as { column: string; selector: string; inputType: string }[],
-    submitSelector: '',
+    submitActions: [] as { type: string; value: string }[],
     waitAfterSubmit: 1500,
     successText: '',
     clearFormBeforeNextRow: false,
@@ -99,6 +99,21 @@ const TaskBuilder: React.FC = () => {
     let config: Record<string, unknown> = {};
     try { config = JSON.parse(step.config_json); } catch { config = {}; }
     if (config.delay === undefined) config.delay = 60;
+    // Migrate old submitSelector to submitActions for excel_form_submit_loop
+    if (step.step_type === 'excel_form_submit_loop' && config.submitSelector !== undefined && !Array.isArray(config.submitActions)) {
+      const sel = String(config.submitSelector ?? '').trim();
+      if (sel) {
+        // Detect if it looks like "x,y" coordinates; otherwise treat as element selector → coordinate pick placeholder
+        const isCoord = /^-?\d+\s*,\s*-?\d+$/.test(sel);
+        config.submitActions = [{ type: isCoord ? 'coordinate' : 'coordinate', value: sel }];
+      } else {
+        config.submitActions = [];
+      }
+      delete config.submitSelector;
+    }
+    if (step.step_type === 'excel_form_submit_loop' && !Array.isArray(config.submitActions)) {
+      config.submitActions = [];
+    }
     setEditingStep({ index, step: { ...step }, config });
   };
 
@@ -667,33 +682,147 @@ const TaskBuilder: React.FC = () => {
                   </button>
                 </div>
 
-                {/* ── Submit Action ── */}
-                <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider pt-1">Submit Action</p>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Submit Button Selector</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={String(editingStep.config.submitSelector ?? '')}
-                      onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitSelector: e.target.value } } : null)}
-                      placeholder="submit_btn or x,y coordinate"
-                      className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                    />
-                    <button
-                      onClick={async () => {
-                        const coords = await window.electronAPI.picker.coordinate();
-                        if (coords) {
-                          setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitSelector: `${coords.x},${coords.y}` } } : null);
-                        }
-                      }}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap"
-                      title="Pick submit button location from screen"
-                    >
-                      🎯 Pick
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Enter an element auto_id / title, or click 🎯 Pick to capture the button's screen coordinates.
+                {/* ── Submit Actions ── */}
+                <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider pt-1">Submit Actions</p>
+                <div className="space-y-2">
+                  {(editingStep.config.submitActions as { type: string; value: string }[]).map((action, ai) => (
+                    <div key={ai} className="flex flex-col gap-1 bg-gray-750 rounded-lg p-2 border border-gray-600">
+                      <div className="flex gap-2 items-center">
+                        <select
+                          value={action.type}
+                          onChange={(e) => {
+                            const submitActions = [...(editingStep.config.submitActions as { type: string; value: string }[])];
+                            submitActions[ai] = { type: e.target.value, value: '' };
+                            setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                          }}
+                          className="bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="coordinate">Coordinate Click</option>
+                          <option value="keyboard">Keyboard Shortcut</option>
+                        </select>
+                        <span className="text-xs text-gray-500 flex-1">Action {ai + 1}</span>
+                        <button
+                          onClick={() => {
+                            const submitActions = (editingStep.config.submitActions as { type: string; value: string }[]).filter((_, i) => i !== ai);
+                            setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                          }}
+                          className="text-red-400 hover:text-red-300 px-1 text-sm"
+                          title="Remove action"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      {action.type === 'coordinate' ? (
+                        <div className="flex gap-2 items-center">
+                          <input
+                            type="number"
+                            value={action.value ? (parseInt(action.value.split(',')[0], 10) || 0) : 0}
+                            onChange={(e) => {
+                              const submitActions = [...(editingStep.config.submitActions as { type: string; value: string }[])];
+                              const parts = (submitActions[ai].value || '0,0').split(',');
+                              parts[0] = e.target.value;
+                              submitActions[ai] = { ...submitActions[ai], value: parts.join(',') };
+                              setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                            }}
+                            placeholder="X"
+                            className="w-20 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                          />
+                          <input
+                            type="number"
+                            value={action.value ? (parseInt(action.value.split(',')[1] ?? '0', 10) || 0) : 0}
+                            onChange={(e) => {
+                              const submitActions = [...(editingStep.config.submitActions as { type: string; value: string }[])];
+                              const parts = (submitActions[ai].value || '0,0').split(',');
+                              parts[1] = e.target.value;
+                              submitActions[ai] = { ...submitActions[ai], value: parts.join(',') };
+                              setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                            }}
+                            placeholder="Y"
+                            className="w-20 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                          />
+                          <button
+                            onClick={async () => {
+                              const coords = await window.electronAPI.picker.coordinate();
+                              if (coords) {
+                                const submitActions = [...(editingStep.config.submitActions as { type: string; value: string }[])];
+                                submitActions[ai] = { ...submitActions[ai], value: `${coords.x},${coords.y}` };
+                                setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                              }
+                            }}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1.5 rounded-lg text-xs flex items-center gap-1 whitespace-nowrap"
+                          >
+                            🎯 Pick
+                          </button>
+                          <span className="text-xs text-gray-500">
+                            {action.value ? `(${action.value})` : 'not set'}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 items-center">
+                          <input
+                            type="text"
+                            value={action.value}
+                            onChange={(e) => {
+                              const submitActions = [...(editingStep.config.submitActions as { type: string; value: string }[])];
+                              submitActions[ai] = { ...submitActions[ai], value: e.target.value };
+                              setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                            }}
+                            onKeyDown={(e) => {
+                              const hasModifier = e.ctrlKey || e.altKey || e.metaKey;
+                              const KEY_MAP: Record<string, string> = {
+                                Control: '', Alt: '', Shift: '', Meta: '',
+                                ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+                                Escape: 'esc', Enter: 'enter', Tab: 'tab', Delete: 'delete',
+                                Backspace: 'backspace', Insert: 'insert', Home: 'home', End: 'end',
+                                PageUp: 'pageup', PageDown: 'pagedown', ' ': 'space',
+                                F1: 'f1', F2: 'f2', F3: 'f3', F4: 'f4', F5: 'f5', F6: 'f6',
+                                F7: 'f7', F8: 'f8', F9: 'f9', F10: 'f10', F11: 'f11', F12: 'f12',
+                              };
+                              const isSpecialKey = e.key in KEY_MAP && KEY_MAP[e.key] !== '';
+                              if (hasModifier || isSpecialKey) {
+                                e.preventDefault();
+                                const parts: string[] = [];
+                                if (e.ctrlKey) parts.push('ctrl');
+                                if (e.altKey) parts.push('alt');
+                                if (e.shiftKey) parts.push('shift');
+                                if (e.metaKey) parts.push('win');
+                                const mappedKey = e.key in KEY_MAP ? KEY_MAP[e.key] : e.key.toLowerCase();
+                                if (mappedKey) parts.push(mappedKey);
+                                if (parts.length > 0) {
+                                  const submitActions = [...(editingStep.config.submitActions as { type: string; value: string }[])];
+                                  submitActions[ai] = { ...submitActions[ai], value: parts.join('+') };
+                                  setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                                }
+                              }
+                            }}
+                            placeholder="Press keys or type manually (e.g. enter, ctrl+s)"
+                            className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500 font-mono cursor-pointer"
+                          />
+                          <button
+                            onClick={() => {
+                              const submitActions = [...(editingStep.config.submitActions as { type: string; value: string }[])];
+                              submitActions[ai] = { ...submitActions[ai], value: '' };
+                              setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                            }}
+                            className="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1.5 rounded-lg text-xs"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => {
+                      const submitActions = [...(editingStep.config.submitActions as { type: string; value: string }[]), { type: 'coordinate', value: '' }];
+                      setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                    }}
+                    className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                  >
+                    + Add Submit Action
+                  </button>
+                  <p className="text-xs text-gray-500">
+                    Add one or more coordinate clicks and/or keyboard shortcuts to execute when submitting each row.
                   </p>
                 </div>
                 <div className="flex gap-3">
