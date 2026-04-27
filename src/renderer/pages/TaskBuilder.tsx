@@ -73,6 +73,7 @@ const TaskBuilder: React.FC = () => {
   const [selectedStepType, setSelectedStepType] = useState<StepType>('launch_exe');
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [excelColumns, setExcelColumns] = useState<string[]>([]);
 
   useEffect(() => {
     if (isEdit && id) {
@@ -85,6 +86,14 @@ const TaskBuilder: React.FC = () => {
       window.electronAPI.steps.list(parseInt(id)).then(setSteps);
     }
   }, [id, isEdit]);
+
+  useEffect(() => {
+    if (editingStep?.step.step_type !== 'excel_form_submit_loop') { setExcelColumns([]); return; }
+    const filePath = String(editingStep.config.filePath ?? '').trim();
+    if (!filePath) { setExcelColumns([]); return; }
+    const sheetName = String(editingStep.config.sheetName ?? 'Sheet1');
+    window.electronAPI.dialog.readExcelHeaders(filePath, sheetName).then(setExcelColumns).catch(() => setExcelColumns([]));
+  }, [editingStep?.config?.filePath, editingStep?.step.step_type]);
 
   const handleAddStep = () => {
     setEditingStep({
@@ -517,7 +526,11 @@ const TaskBuilder: React.FC = () => {
                     <button
                       onClick={async () => {
                         const fp = await window.electronAPI.dialog.openExcelFile();
-                        if (fp) setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, filePath: fp } } : null);
+                        if (fp) {
+                          setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, filePath: fp } } : null);
+                          const sheetName = String(editingStep?.config.sheetName ?? 'Sheet1');
+                          window.electronAPI.dialog.readExcelHeaders(fp, sheetName).then(setExcelColumns).catch(() => setExcelColumns([]));
+                        }
                       }}
                       className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap"
                     >
@@ -569,21 +582,32 @@ const TaskBuilder: React.FC = () => {
 
                 {/* ── Field Mappings ── */}
                 <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider pt-1">Field Mappings</p>
+                {excelColumns.length > 0 && (
+                  <p className="text-xs text-gray-500">
+                    {excelColumns.length} columns detected — click the Excel Column field to pick a column.
+                  </p>
+                )}
                 <div className="space-y-2">
                   {(editingStep.config.mappings as { column: string; selector: string; inputType: string }[]).map((m, mi) => (
                     <div key={mi} className="flex flex-col gap-1">
                       <div className="flex gap-2 items-center">
                         <input
                           type="text"
+                          list={`excel-cols-mapping-${mi}`}
                           value={m.column}
                           onChange={(e) => {
                             const mappings = [...(editingStep.config.mappings as { column: string; selector: string; inputType: string }[])];
                             mappings[mi] = { ...mappings[mi], column: e.target.value };
                             setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
                           }}
-                          placeholder="Excel Column"
+                          placeholder={excelColumns.length > 0 ? 'Pick or type column name…' : 'Excel Column'}
                           className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
                         />
+                        {excelColumns.length > 0 && (
+                          <datalist id={`excel-cols-mapping-${mi}`}>
+                            {excelColumns.map((col) => <option key={col} value={col} />)}
+                          </datalist>
+                        )}
                         <select
                           value={m.inputType}
                           onChange={(e) => {
@@ -699,6 +723,7 @@ const TaskBuilder: React.FC = () => {
                         >
                           <option value="coordinate">Coordinate Click</option>
                           <option value="keyboard">Keyboard Shortcut</option>
+                          <option value="type_text">Type Text (Column Value)</option>
                         </select>
                         <span className="text-xs text-gray-500 flex-1">Action {ai + 1}</span>
                         <button
@@ -756,6 +781,26 @@ const TaskBuilder: React.FC = () => {
                           <span className="text-xs text-gray-500">
                             {action.value ? `(${action.value})` : 'not set'}
                           </span>
+                        </div>
+                      ) : action.type === 'type_text' ? (
+                        <div className="flex gap-2 items-center">
+                          <input
+                            type="text"
+                            list={`excel-cols-action-${ai}`}
+                            value={action.value}
+                            onChange={(e) => {
+                              const submitActions = [...(editingStep.config.submitActions as { type: string; value: string }[])];
+                              submitActions[ai] = { ...submitActions[ai], value: e.target.value };
+                              setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                            }}
+                            placeholder={excelColumns.length > 0 ? 'Pick column to type…' : 'Column name'}
+                            className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                          />
+                          {excelColumns.length > 0 && (
+                            <datalist id={`excel-cols-action-${ai}`}>
+                              {excelColumns.map((col) => <option key={col} value={col} />)}
+                            </datalist>
+                          )}
                         </div>
                       ) : (
                         <div className="flex gap-2 items-center">
@@ -822,7 +867,7 @@ const TaskBuilder: React.FC = () => {
                     + Add Submit Action
                   </button>
                   <p className="text-xs text-gray-500">
-                    Add one or more coordinate clicks and/or keyboard shortcuts to execute when submitting each row.
+                    Add coordinate clicks, keyboard shortcuts, or "Type Text (Column Value)" actions to execute when submitting each row.
                   </p>
                 </div>
                 <div className="flex gap-3">

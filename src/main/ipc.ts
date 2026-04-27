@@ -63,6 +63,34 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
     return result.canceled ? null : result.filePaths[0];
   });
 
+  // Read column headers from an Excel or CSV file
+  ipcMain.handle('dialog:readExcelHeaders', (_e, filePath: string, sheetName?: string) => {
+    return new Promise<string[]>((resolve) => {
+      if (!filePath) { resolve([]); return; }
+      const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
+      const settings = getSettings();
+      const python = settings.python_path || pythonPath || 'python';
+      const proc = spawn(python, [enginePath], { stdio: ['pipe', 'pipe', 'pipe'] });
+      let output = '';
+      proc.stdout.on('data', (data: Buffer) => { output += data.toString(); });
+      proc.stdin.write(JSON.stringify({ command: 'get_headers', file_path: filePath, sheet_name: sheetName ?? null }) + '\n');
+      proc.stdin.end();
+      proc.on('close', () => {
+        try {
+          for (const line of output.trim().split('\n')) {
+            const msg = JSON.parse(line);
+            if (msg.status === 'ok' && Array.isArray(msg.headers)) {
+              resolve(msg.headers as string[]);
+              return;
+            }
+          }
+        } catch { /* ignore parse errors */ }
+        resolve([]);
+      });
+      proc.on('error', () => resolve([]));
+    });
+  });
+
   // Coordinate picker — hides main window, shows a transparent fullscreen overlay; resolves with {x, y} or null
   ipcMain.handle('picker:coordinate', () => {
     return new Promise<{ x: number; y: number } | null>((resolve) => {

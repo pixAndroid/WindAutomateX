@@ -35,6 +35,15 @@ def main():
             task_id = msg.get("task_id", 0)
             steps_json = msg.get("steps", "[]")
             executor.execute(task_id, steps_json)
+        elif command == "get_headers":
+            file_path = msg.get("file_path", "")
+            sheet_name = msg.get("sheet_name") or None
+            try:
+                from excel_loop import get_excel_headers
+                headers = get_excel_headers(file_path, sheet_name)
+                print(json.dumps({"status": "ok", "headers": headers}), flush=True)
+            except Exception as e:
+                print(json.dumps({"status": "failed", "message": str(e)}), flush=True)
         elif command == "ping":
             print(json.dumps({"status": "pong"}), flush=True)
         else:

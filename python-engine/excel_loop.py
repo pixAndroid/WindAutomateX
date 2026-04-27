@@ -8,6 +8,9 @@ Public API
 ----------
 run_excel_form_loop(config, engine) -> dict
     Entry-point called by the main execution engine.
+
+get_excel_headers(file_path, sheet_name) -> list[str]
+    Return the header row from an Excel or CSV file.
 """
 
 import csv
@@ -184,6 +187,47 @@ def _load_csv_rows(
     for row in data_rows:
         rows.append({headers[i]: (row[i] if i < len(row) else "") for i in range(len(headers))})
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Header inspection
+# ---------------------------------------------------------------------------
+
+def get_excel_headers(file_path: str, sheet_name: str | None = None) -> list[str]:
+    """
+    Return the list of column header names from the first row of *file_path*.
+
+    Works for ``.xlsx`` / ``.xls`` (via openpyxl) and ``.csv`` files.
+    If *sheet_name* is provided and exists the matching sheet is used;
+    otherwise the workbook's active (first) sheet is used.
+    """
+    if not file_path:
+        raise ValueError("file_path is required")
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    ext = os.path.splitext(file_path)[1].lower()
+
+    if ext == ".csv":
+        with open(file_path, newline="", encoding="utf-8-sig") as f:
+            reader = csv.reader(f)
+            first_row = next(reader, [])
+        return [str(h).strip() for h in first_row if str(h).strip()]
+
+    # XLSX / XLS
+    try:
+        import openpyxl
+    except ImportError:
+        raise ImportError("openpyxl is required for xlsx support. Run: pip install openpyxl")
+
+    wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+    if sheet_name and sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+    else:
+        ws = wb.active
+    first_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ())
+    wb.close()
+    return [str(h).strip() for h in first_row if h is not None and str(h).strip()]
 
 
 # ---------------------------------------------------------------------------
@@ -426,6 +470,12 @@ def process_row(
                     click_submit(value, engine)
                 elif action_type == "keyboard":
                     _press_keyboard_shortcut(value, engine)
+                elif action_type == "type_text":
+                    # value is the Excel column name; type its text into the active field
+                    text_to_type = str(row.get(value, ""))
+                    if engine.pyautogui_available:
+                        import pyautogui
+                        pyautogui.write(text_to_type, interval=0.03)
         elif submit_selector:
             # Backward-compatible: old single submitSelector
             click_submit(submit_selector, engine)
