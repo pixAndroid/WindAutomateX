@@ -463,7 +463,7 @@ def process_row(
             for action in submit_actions:
                 action_type = action.get("type", "coordinate")
                 value = action.get("value", "")
-                if not value:
+                if not value and action_type != "delay":
                     logger.warning(f"Row {row_index + 1}: submit action of type '{action_type}' has no value, skipping")
                     continue
                 if action_type == "coordinate":
@@ -476,6 +476,11 @@ def process_row(
                     if engine.pyautogui_available:
                         import pyautogui
                         pyautogui.write(text_to_type, interval=0.03)
+                elif action_type == "delay":
+                    delay_ms = int(value) if value else 0
+                    if delay_ms > 0:
+                        import time
+                        time.sleep(delay_ms / 1000.0)
         elif submit_selector:
             # Backward-compatible: old single submitSelector
             click_submit(submit_selector, engine)
