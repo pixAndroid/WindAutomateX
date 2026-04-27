@@ -34,7 +34,8 @@ def main():
         if command == "execute":
             task_id = msg.get("task_id", 0)
             steps_json = msg.get("steps", "[]")
-            executor.execute(task_id, steps_json)
+            all_tasks = msg.get("all_tasks", {})
+            executor.execute(task_id, steps_json, all_tasks)
         elif command == "get_headers":
             file_path = msg.get("file_path", "")
             sheet_name = msg.get("sheet_name") or None

@@ -51,7 +51,19 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
     return result.canceled ? null : result.filePaths[0];
   });
 
-  // File dialog — open a single Excel or CSV file
+  // File dialog — open a single image file (PNG/JPG/BMP)
+  ipcMain.handle('dialog:openImageFile', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [
+        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'bmp', 'tiff', 'webp'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+
   ipcMain.handle('dialog:openExcelFile', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openFile'],
@@ -158,6 +170,14 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
     if (!mainWindow.isDestroyed()) mainWindow.minimize();
 
     const stepsJson = JSON.stringify(steps);
+
+    // Build a map of all tasks' steps so the Python engine can execute run_task steps
+    const allTasks = getTasks();
+    const allTasksMap: Record<string, TaskStep[]> = {};
+    for (const t of allTasks) {
+      allTasksMap[String(t.id)] = getSteps(t.id);
+    }
+
     const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
     const settings = getSettings();
     const python = settings.python_path || pythonPath || 'python';
@@ -169,7 +189,7 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
     runningProcesses.set(run.id, proc);
 
     // Send execute command
-    proc.stdin.write(JSON.stringify({ command: 'execute', task_id: taskId, steps: stepsJson }) + '\n');
+    proc.stdin.write(JSON.stringify({ command: 'execute', task_id: taskId, steps: stepsJson, all_tasks: allTasksMap }) + '\n');
 
     let logBuffer = '';
 

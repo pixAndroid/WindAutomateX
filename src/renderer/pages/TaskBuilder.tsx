@@ -17,7 +17,7 @@ const ALL_STEP_TYPES: StepType[] = [
   'type_text', 'press_key', 'keyboard_shortcut', 'select_dropdown', 'upload_file',
   'download_file', 'wait_download', 'wait_upload', 'read_text',
   'if_condition', 'loop', 'delay', 'screenshot', 'close_app', 'kill_process',
-  'excel_form_submit_loop',
+  'excel_form_submit_loop', 'detect_image', 'run_task',
 ];
 
 const defaultConfig: Record<StepType, Record<string, unknown>> = {
@@ -58,6 +58,8 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
     resumeFromLastRow: false,
     delay: 60,
   },
+  detect_image: { template_path: '', threshold: 0.85, output_var: 'detected', delay: 60 },
+  run_task: { task_id: '', delay: 60 },
 };
 
 interface EditingStep {
@@ -83,6 +85,11 @@ const TaskBuilder: React.FC = () => {
   const [dragActionIndex, setDragActionIndex] = useState<number | null>(null);
   const [dragOverActionIndex, setDragOverActionIndex] = useState<number | null>(null);
   const [excelColumns, setExcelColumns] = useState<string[]>([]);
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
+
+  useEffect(() => {
+    window.electronAPI.tasks.list().then(setAllTasks).catch(() => setAllTasks([]));
+  }, []);
 
   useEffect(() => {
     if (isEdit && id) {
@@ -299,7 +306,10 @@ const TaskBuilder: React.FC = () => {
             >
               {ALL_STEP_TYPES.map((t) => (
                 <option key={t} value={t}>
-                  {t === 'excel_form_submit_loop' ? 'Excel Form Submit Loop (Business Automation)' : t.replace(/_/g, ' ')}
+                  {t === 'excel_form_submit_loop' ? 'Excel Form Submit Loop (Business Automation)'
+                    : t === 'detect_image' ? 'Detect Image (Window/Screen)'
+                    : t === 'run_task' ? 'Run Linked Task'
+                    : t.replace(/_/g, ' ')}
                 </option>
               ))}
             </select>
@@ -1022,6 +1032,142 @@ const TaskBuilder: React.FC = () => {
                     />
                     Resume From Last Processed Row
                   </label>
+                </div>
+              </>
+            ) : editingStep.step.step_type === 'detect_image' ? (
+              <>
+                {/* Template Image */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Template Image</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={String(editingStep.config.template_path ?? '')}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, template_path: e.target.value } } : null
+                        )
+                      }
+                      placeholder="C:\screenshots\expected_window.png"
+                      className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      onClick={async () => {
+                        const fp = await window.electronAPI.dialog.openImageFile();
+                        if (fp) {
+                          setEditingStep((prev) =>
+                            prev ? { ...prev, config: { ...prev.config, template_path: fp } } : null
+                          );
+                        }
+                      }}
+                      className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap"
+                    >
+                      Browse…
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Select a reference screenshot of the expected window/screen. Use a PNG or JPG file.
+                  </p>
+                </div>
+
+                {/* Threshold */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">
+                    Match Threshold: {Number(editingStep.config.threshold ?? 0.85).toFixed(2)}
+                  </label>
+                  <input
+                    type="range"
+                    min={0.5}
+                    max={1.0}
+                    step={0.01}
+                    value={Number(editingStep.config.threshold ?? 0.85)}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, threshold: Number(e.target.value) } } : null
+                      )
+                    }
+                    className="w-full accent-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Confidence level for a positive match (0.50–1.00). Default: 0.85. Higher = stricter.
+                  </p>
+                </div>
+
+                {/* Output variable */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Output Variable (optional)</label>
+                  <input
+                    type="text"
+                    value={String(editingStep.config.output_var ?? '')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, output_var: e.target.value } } : null
+                      )
+                    }
+                    placeholder="e.g. detected"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    If set, stores <code className="text-gray-400">true</code> or <code className="text-gray-400">false</code> in this variable so an <em>if_condition</em> step can branch on the result.
+                  </p>
+                </div>
+
+                {/* Search region (optional) */}
+                <div>
+                  <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Search Region (optional — leave at 0 for full screen)</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {(['x', 'y', 'width', 'height'] as const).map((field) => (
+                      <div key={field}>
+                        <label className="block text-xs text-gray-400 mb-1">{field}</label>
+                        <input
+                          type="number"
+                          value={String(
+                            (editingStep.config.region as Record<string, number> | undefined)?.[field] ?? 0
+                          )}
+                          onChange={(e) => {
+                            const region = {
+                              ...((editingStep.config.region as Record<string, number>) ?? {}),
+                              [field]: Number(e.target.value),
+                            };
+                            setEditingStep((prev) =>
+                              prev ? { ...prev, config: { ...prev.config, region } } : null
+                            );
+                          }}
+                          className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Restrict template search to this screen region. Width and Height must be &gt; 0 to apply.
+                  </p>
+                </div>
+              </>
+            ) : editingStep.step.step_type === 'run_task' ? (
+              <>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Linked Task</label>
+                  <select
+                    value={String(editingStep.config.task_id ?? '')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, task_id: e.target.value } } : null
+                      )
+                    }
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">— Select a task —</option>
+                    {allTasks
+                      .filter((t) => String(t.id) !== id)
+                      .map((t) => (
+                        <option key={t.id} value={String(t.id)}>
+                          {t.name} (#{t.id})
+                        </option>
+                      ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    When this step runs the selected task will execute completely before the parent task continues to the next step.
+                  </p>
                 </div>
               </>
             ) : (

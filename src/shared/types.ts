@@ -37,7 +37,9 @@ export type StepType =
   | 'close_app'
   | 'kill_process'
   | 'keyboard_shortcut'
-  | 'excel_form_submit_loop';
+  | 'excel_form_submit_loop'
+  | 'detect_image'
+  | 'run_task';
 
 export interface Run {
   id: number;
@@ -100,6 +102,7 @@ export interface ElectronAPI {
   dialog: {
     openFile: () => Promise<string | null>;
     openExcelFile: () => Promise<string | null>;
+    openImageFile: () => Promise<string | null>;
     readExcelHeaders: (filePath: string, sheetName?: string) => Promise<string[]>;
   };
   picker: {
