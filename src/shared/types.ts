@@ -100,6 +100,7 @@ export interface ElectronAPI {
   dialog: {
     openFile: () => Promise<string | null>;
     openExcelFile: () => Promise<string | null>;
+    readExcelHeaders: (filePath: string, sheetName?: string) => Promise<string[]>;
   };
   picker: {
     coordinate: () => Promise<{ x: number; y: number } | null>;
