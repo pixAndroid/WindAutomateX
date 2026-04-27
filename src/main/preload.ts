@@ -43,6 +43,7 @@ const api: ElectronAPI = {
   },
   dialog: {
     openFile: () => ipcRenderer.invoke('dialog:openFile'),
+    openExcelFile: () => ipcRenderer.invoke('dialog:openExcelFile'),
   },
   picker: {
     coordinate: () => ipcRenderer.invoke('picker:coordinate'),

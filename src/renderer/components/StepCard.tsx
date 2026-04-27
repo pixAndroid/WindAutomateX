@@ -21,6 +21,7 @@ const stepIcons: Record<StepType, string> = {
   screenshot: '📸',
   close_app: '❌',
   kill_process: '💀',
+  excel_form_submit_loop: '📊',
 };
 
 const stepLabels: Record<StepType, string> = {
@@ -43,6 +44,7 @@ const stepLabels: Record<StepType, string> = {
   screenshot: 'Screenshot',
   close_app: 'Close App',
   kill_process: 'Kill Process',
+  excel_form_submit_loop: 'Excel Form Submit Loop',
 };
 
 interface StepCardProps {
@@ -66,8 +68,15 @@ const StepCard: React.FC<StepCardProps> = ({ step, index, total, isDragging, isD
   let configSummary = '';
   try {
     const config = JSON.parse(step.config_json);
-    const entries = Object.entries(config).slice(0, 2);
-    configSummary = entries.map(([k, v]) => `${k}: ${String(v)}`).join(', ');
+    if (step.step_type === 'excel_form_submit_loop') {
+      const fileName = config.filePath ? config.filePath.split(/[\\/]/).pop() : 'No file';
+      const mappingCount = Array.isArray(config.mappings) ? config.mappings.length : 0;
+      const rowRange = `Rows: ${config.startRow ?? 2} to ${config.endRow ?? 'End'}`;
+      configSummary = `File: ${fileName} · Mappings: ${mappingCount} fields · ${rowRange}`;
+    } else {
+      const entries = Object.entries(config).slice(0, 2);
+      configSummary = entries.map(([k, v]) => `${k}: ${String(v)}`).join(', ');
+    }
   } catch {
     configSummary = step.config_json;
   }

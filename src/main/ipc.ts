@@ -51,6 +51,18 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
     return result.canceled ? null : result.filePaths[0];
   });
 
+  // File dialog — open a single Excel or CSV file
+  ipcMain.handle('dialog:openExcelFile', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [
+        { name: 'Excel / CSV', extensions: ['xlsx', 'xls', 'csv'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
   // Coordinate picker — hides main window, shows a transparent fullscreen overlay; resolves with {x, y} or null
   ipcMain.handle('picker:coordinate', () => {
     return new Promise<{ x: number; y: number } | null>((resolve) => {

@@ -10,6 +10,7 @@ const ALL_STEP_TYPES: StepType[] = [
   'type_text', 'press_key', 'keyboard_shortcut', 'select_dropdown', 'upload_file',
   'download_file', 'wait_download', 'wait_upload', 'read_text',
   'if_condition', 'loop', 'delay', 'screenshot', 'close_app', 'kill_process',
+  'excel_form_submit_loop',
 ];
 
 const defaultConfig: Record<StepType, Record<string, unknown>> = {
@@ -32,6 +33,24 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
   screenshot: { path: '', delay: 60 },
   close_app: { window_title: '', delay: 60 },
   kill_process: { process_name: '', delay: 60 },
+  excel_form_submit_loop: {
+    filePath: '',
+    sheetName: 'Sheet1',
+    hasHeader: true,
+    startRow: 2,
+    endRow: null,
+    mappings: [] as { column: string; selector: string; inputType: string }[],
+    submitSelector: '',
+    waitAfterSubmit: 1500,
+    successText: '',
+    clearFormBeforeNextRow: false,
+    continueOnError: true,
+    retryCount: 2,
+    delayBetweenRows: 1000,
+    saveScreenshotOnFailure: false,
+    resumeFromLastRow: false,
+    delay: 60,
+  },
 };
 
 interface EditingStep {
@@ -240,7 +259,9 @@ const TaskBuilder: React.FC = () => {
               className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm flex-1 focus:outline-none focus:border-blue-500"
             >
               {ALL_STEP_TYPES.map((t) => (
-                <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                <option key={t} value={t}>
+                  {t === 'excel_form_submit_loop' ? 'Excel Form Submit Loop (Business Automation)' : t.replace(/_/g, ' ')}
+                </option>
               ))}
             </select>
             <button
@@ -462,6 +483,235 @@ const TaskBuilder: React.FC = () => {
                   <p className="text-xs text-gray-500 mt-1">
                     Press a key combination to auto-capture (e.g. Ctrl+C, Alt+F4, Ctrl+Shift+S), or type it manually for OS-level shortcuts like Alt+Tab.
                   </p>
+                </div>
+              </>
+            ) : editingStep.step.step_type === 'excel_form_submit_loop' ? (
+              <>
+                {/* ── Data Source ── */}
+                <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider">Data Source</p>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">File Path (xlsx / csv)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={String(editingStep.config.filePath ?? '')}
+                      onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, filePath: e.target.value } } : null)}
+                      placeholder="C:\data\customers.xlsx"
+                      className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      onClick={async () => {
+                        const fp = await window.electronAPI.dialog.openExcelFile();
+                        if (fp) setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, filePath: fp } } : null);
+                      }}
+                      className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap"
+                    >
+                      Browse…
+                    </button>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-1">Sheet Name</label>
+                    <input
+                      type="text"
+                      value={String(editingStep.config.sheetName ?? 'Sheet1')}
+                      onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, sheetName: e.target.value } } : null)}
+                      placeholder="Sheet1"
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-1">Start Row</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.startRow ?? 2)}
+                      onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, startRow: Number(e.target.value) } } : null)}
+                      min={1}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-1">End Row (optional)</label>
+                    <input
+                      type="number"
+                      value={editingStep.config.endRow != null ? String(editingStep.config.endRow) : ''}
+                      onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, endRow: e.target.value === '' ? null : Number(e.target.value) } } : null)}
+                      placeholder="Leave empty for all"
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingStep.config.hasHeader)}
+                    onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, hasHeader: e.target.checked } } : null)}
+                    className="accent-blue-500"
+                  />
+                  Has Header Row
+                </label>
+
+                {/* ── Field Mappings ── */}
+                <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider pt-1">Field Mappings</p>
+                <div className="space-y-2">
+                  {(editingStep.config.mappings as { column: string; selector: string; inputType: string }[]).map((m, mi) => (
+                    <div key={mi} className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        value={m.column}
+                        onChange={(e) => {
+                          const mappings = [...(editingStep.config.mappings as { column: string; selector: string; inputType: string }[])];
+                          mappings[mi] = { ...mappings[mi], column: e.target.value };
+                          setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
+                        }}
+                        placeholder="Excel Column"
+                        className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                      />
+                      <input
+                        type="text"
+                        value={m.selector}
+                        onChange={(e) => {
+                          const mappings = [...(editingStep.config.mappings as { column: string; selector: string; inputType: string }[])];
+                          mappings[mi] = { ...mappings[mi], selector: e.target.value };
+                          setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
+                        }}
+                        placeholder="Field Selector"
+                        className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                      />
+                      <select
+                        value={m.inputType}
+                        onChange={(e) => {
+                          const mappings = [...(editingStep.config.mappings as { column: string; selector: string; inputType: string }[])];
+                          mappings[mi] = { ...mappings[mi], inputType: e.target.value };
+                          setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
+                        }}
+                        className="bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="text">text</option>
+                        <option value="dropdown">dropdown</option>
+                        <option value="checkbox">checkbox</option>
+                      </select>
+                      <button
+                        onClick={() => {
+                          const mappings = (editingStep.config.mappings as { column: string; selector: string; inputType: string }[]).filter((_, i) => i !== mi);
+                          setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
+                        }}
+                        className="text-red-400 hover:text-red-300 px-1 text-sm"
+                        title="Remove mapping"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => {
+                      const mappings = [...(editingStep.config.mappings as { column: string; selector: string; inputType: string }[]), { column: '', selector: '', inputType: 'text' }];
+                      setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, mappings } } : null);
+                    }}
+                    className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                  >
+                    + Add Mapping
+                  </button>
+                </div>
+
+                {/* ── Submit Action ── */}
+                <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider pt-1">Submit Action</p>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Submit Button Selector</label>
+                  <input
+                    type="text"
+                    value={String(editingStep.config.submitSelector ?? '')}
+                    onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitSelector: e.target.value } } : null)}
+                    placeholder="submit_btn"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-1">Wait After Submit (ms)</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.waitAfterSubmit ?? 1500)}
+                      onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, waitAfterSubmit: Number(e.target.value) } } : null)}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-1">Success Text (optional)</label>
+                    <input
+                      type="text"
+                      value={String(editingStep.config.successText ?? '')}
+                      onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, successText: e.target.value } } : null)}
+                      placeholder="e.g. Submitted successfully"
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingStep.config.clearFormBeforeNextRow)}
+                    onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, clearFormBeforeNextRow: e.target.checked } } : null)}
+                    className="accent-blue-500"
+                  />
+                  Clear Form Before Next Row
+                </label>
+
+                {/* ── Error Handling ── */}
+                <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider pt-1">Error Handling</p>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-1">Retry Count</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.retryCount ?? 2)}
+                      onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, retryCount: Number(e.target.value) } } : null)}
+                      min={0}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-1">Delay Between Rows (ms)</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.delayBetweenRows ?? 1000)}
+                      onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, delayBetweenRows: Number(e.target.value) } } : null)}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingStep.config.continueOnError)}
+                    onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, continueOnError: e.target.checked } } : null)}
+                    className="accent-blue-500"
+                  />
+                  Continue On Error
+                </label>
+
+                {/* ── Advanced ── */}
+                <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider pt-1">Advanced</p>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editingStep.config.saveScreenshotOnFailure)}
+                      onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, saveScreenshotOnFailure: e.target.checked } } : null)}
+                      className="accent-blue-500"
+                    />
+                    Save Screenshot On Failure
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editingStep.config.resumeFromLastRow)}
+                      onChange={(e) => setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, resumeFromLastRow: e.target.checked } } : null)}
+                      className="accent-blue-500"
+                    />
+                    Resume From Last Processed Row
+                  </label>
                 </div>
               </>
             ) : (
