@@ -533,7 +533,7 @@ def run_excel_form_loop_for_row(config: dict, row: dict, row_index: int, engine)
     """
     submit_actions = config.get("submitActions") or []
     if not submit_actions and not config.get("submitSelector"):
-        return {"success": False, "message": "At least one submit action is required"}
+        return {"success": False, "message": "Either submitActions or submitSelector must be configured"}
 
     retry_count: int = int(config.get("retryCount", 2))
     save_screenshot: bool = bool(config.get("saveScreenshotOnFailure", False))
