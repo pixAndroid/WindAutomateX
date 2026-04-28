@@ -87,6 +87,30 @@ export function scheduleTask(task: Task): void {
         }
       }
       break;
+    case 'hourly':
+      // schedule_value = minute offset (0-59), e.g. "30" runs at :30 of every hour
+      if (task.schedule_value !== undefined && task.schedule_value !== '') {
+        const minuteOffset = parseInt(task.schedule_value, 10);
+        if (!isNaN(minuteOffset) && minuteOffset >= 0 && minuteOffset <= 59) {
+          cronExpression = `${minuteOffset} * * * *`;
+        }
+      } else {
+        cronExpression = `0 * * * *`;
+      }
+      break;
+    case 'minutely':
+      // schedule_value = interval in minutes (1-59), e.g. "5" runs every 5 minutes
+      if (task.schedule_value) {
+        const intervalMin = parseInt(task.schedule_value, 10);
+        if (!isNaN(intervalMin) && intervalMin > 0 && intervalMin <= 60) {
+          cronExpression = `*/${intervalMin} * * * *`;
+        } else {
+          cronExpression = `* * * * *`;
+        }
+      } else {
+        cronExpression = `* * * * *`;
+      }
+      break;
     case 'interval':
       // schedule_value = interval in minutes
       if (task.schedule_value) {

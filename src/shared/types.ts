@@ -3,7 +3,7 @@ export interface Task {
   name: string;
   description: string;
   enabled: boolean;
-  schedule_type: 'once' | 'daily' | 'weekly' | 'monthly' | 'interval' | 'startup';
+  schedule_type: 'once' | 'daily' | 'weekly' | 'monthly' | 'hourly' | 'minutely' | 'interval' | 'startup';
   schedule_value: string;
   created_at: string;
   updated_at: string;

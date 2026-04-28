@@ -1,31 +1,203 @@
-import React, { useEffect, useState } from 'react';
-import type { Task } from '../../shared/types';
+import React, { useEffect, useState, useCallback } from 'react';
+import type { Task, Run } from '../../shared/types';
 import { useToast } from '../components/Toast';
+
+const DOW_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+type ScheduleType = Task['schedule_type'];
+
+interface EditState {
+  type: ScheduleType;
+  // once
+  dateTime: string;
+  // daily
+  time: string;
+  // weekly
+  dow: string;
+  weekTime: string;
+  // monthly
+  monthDay: string;
+  monthTime: string;
+  // hourly
+  hourMinute: string;
+  // minutely / interval
+  intervalMins: string;
+}
+
+function buildScheduleValue(edit: EditState): string {
+  switch (edit.type) {
+    case 'once':
+      // datetime-local gives "YYYY-MM-DDTHH:MM", convert to full ISO
+      return edit.dateTime ? new Date(edit.dateTime).toISOString() : '';
+    case 'daily':
+      return edit.time;
+    case 'weekly':
+      return `${edit.dow} ${edit.weekTime}`;
+    case 'monthly':
+      return `${edit.monthDay} ${edit.monthTime}`;
+    case 'hourly':
+      return edit.hourMinute;
+    case 'minutely':
+      return edit.intervalMins;
+    case 'interval':
+      return edit.intervalMins;
+    case 'startup':
+      return '';
+  }
+}
+
+function parseEditState(task: Task): EditState {
+  const base: EditState = {
+    type: task.schedule_type,
+    dateTime: '',
+    time: '09:00',
+    dow: '1',
+    weekTime: '09:00',
+    monthDay: '1',
+    monthTime: '09:00',
+    hourMinute: '0',
+    intervalMins: '30',
+  };
+  const v = task.schedule_value || '';
+  switch (task.schedule_type) {
+    case 'once': {
+      if (v) {
+        const d = new Date(v);
+        if (!isNaN(d.getTime())) {
+          // Format as YYYY-MM-DDTHH:MM for datetime-local
+          const pad = (n: number) => String(n).padStart(2, '0');
+          base.dateTime = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+      }
+      break;
+    }
+    case 'daily':
+      base.time = v || '09:00';
+      break;
+    case 'weekly': {
+      const parts = v.split(' ');
+      if (parts.length === 2) { base.dow = parts[0]; base.weekTime = parts[1]; }
+      break;
+    }
+    case 'monthly': {
+      const parts = v.split(' ');
+      if (parts.length === 2) { base.monthDay = parts[0]; base.monthTime = parts[1]; }
+      break;
+    }
+    case 'hourly':
+      base.hourMinute = v || '0';
+      break;
+    case 'minutely':
+      base.intervalMins = v || '1';
+      break;
+    case 'interval':
+      base.intervalMins = v || '30';
+      break;
+    default:
+      break;
+  }
+  return base;
+}
+
+function getNextRunLabel(task: Task): string {
+  if (!task.enabled) return 'Disabled';
+  const v = task.schedule_value || '';
+  switch (task.schedule_type) {
+    case 'startup':
+      return 'On Startup';
+    case 'once':
+      if (v) {
+        const d = new Date(v);
+        if (!isNaN(d.getTime())) return d.toLocaleString();
+      }
+      return 'Not set';
+    case 'daily':
+      return v ? `Daily at ${v}` : 'Scheduled';
+    case 'weekly': {
+      const parts = v.split(' ');
+      if (parts.length === 2) {
+        const dayName = DOW_NAMES[parseInt(parts[0], 10)] || parts[0];
+        return `Weekly on ${dayName} at ${parts[1]}`;
+      }
+      return 'Scheduled';
+    }
+    case 'monthly': {
+      const parts = v.split(' ');
+      if (parts.length === 2) return `Monthly on day ${parts[0]} at ${parts[1]}`;
+      return 'Scheduled';
+    }
+    case 'hourly':
+      return v !== '' ? `Hourly at :${v.padStart(2, '0')}` : 'Hourly at :00';
+    case 'minutely': {
+      const mins = v ? parseInt(v, 10) : 1;
+      return mins === 1 ? 'Every minute' : `Every ${mins} minutes`;
+    }
+    case 'interval':
+      return v ? `Every ${v} min` : 'Scheduled';
+    default:
+      return 'Scheduled';
+  }
+}
 
 const SchedulerPage: React.FC = () => {
   const { showToast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [scheduleType, setScheduleType] = useState<Task['schedule_type']>('daily');
-  const [scheduleValue, setScheduleValue] = useState('');
+  const [editState, setEditState] = useState<EditState | null>(null);
+  const [runningTaskIds, setRunningTaskIds] = useState<Set<number>>(new Set());
 
   const load = async () => {
     const all = await window.electronAPI.tasks.list();
     setTasks(all);
   };
 
-  useEffect(() => { load(); }, []);
+  // Initialise running task IDs from persisted runs
+  useEffect(() => {
+    window.electronAPI.runs.list().then((runs: Run[]) => {
+      const ids = new Set(
+        runs.filter((r) => r.status === 'running').map((r) => r.task_id)
+      );
+      setRunningTaskIds(ids);
+    });
+  }, []);
+
+  // Listen for live run updates to track running state
+  const handleRunUpdate = useCallback((_event: Electron.IpcRendererEvent, run: Run) => {
+    setRunningTaskIds((prev) => {
+      const next = new Set(prev);
+      if (run.status === 'running') {
+        next.add(run.task_id);
+      } else {
+        next.delete(run.task_id);
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    load();
+    window.electronAPI.onRunUpdate(handleRunUpdate);
+    return () => {
+      window.electronAPI.offRunUpdate(handleRunUpdate);
+    };
+  }, [handleRunUpdate]);
 
   const handleEdit = (task: Task) => {
     setEditingId(task.id);
-    setScheduleType(task.schedule_type);
-    setScheduleValue(task.schedule_value);
+    setEditState(parseEditState(task));
+  };
+
+  const updateEdit = (patch: Partial<EditState>) => {
+    setEditState((prev) => prev ? { ...prev, ...patch } : prev);
   };
 
   const handleSave = async (id: number) => {
-    await window.electronAPI.tasks.update(id, { schedule_type: scheduleType, schedule_value: scheduleValue });
+    if (!editState) return;
+    const schedule_value = buildScheduleValue(editState);
+    await window.electronAPI.tasks.update(id, { schedule_type: editState.type, schedule_value });
     showToast('Schedule saved', 'success');
     setEditingId(null);
+    setEditState(null);
     load();
   };
 
@@ -35,22 +207,135 @@ const SchedulerPage: React.FC = () => {
     load();
   };
 
-  const getNextRun = (task: Task): string => {
-    if (!task.enabled) return 'Disabled';
-    if (task.schedule_type === 'startup') return 'On Startup';
-    if (task.schedule_type === 'once' && task.schedule_value) {
-      return new Date(task.schedule_value).toLocaleString();
-    }
-    return 'Scheduled';
-  };
+  const ALL_TYPES: ScheduleType[] = ['once', 'daily', 'weekly', 'monthly', 'hourly', 'minutely', 'interval', 'startup'];
 
-  const scheduleValueLabel: Record<Task['schedule_type'], string> = {
-    once: 'Date & Time (ISO)',
-    daily: 'Time (HH:MM)',
-    weekly: 'Day Time (1 09:00)',
-    monthly: 'Day Time (15 09:00)',
-    interval: 'Interval (minutes)',
-    startup: 'N/A',
+  const renderSchedulePicker = (edit: EditState) => {
+    switch (edit.type) {
+      case 'once':
+        return (
+          <div className="flex-1">
+            <label className="block text-xs text-gray-400 mb-1">Date &amp; Time</label>
+            <input
+              type="datetime-local"
+              value={edit.dateTime}
+              onChange={(e) => updateEdit({ dateTime: e.target.value })}
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            />
+          </div>
+        );
+      case 'daily':
+        return (
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Time (HH:MM)</label>
+            <input
+              type="time"
+              value={edit.time}
+              onChange={(e) => updateEdit({ time: e.target.value })}
+              className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            />
+          </div>
+        );
+      case 'weekly':
+        return (
+          <>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Day of Week</label>
+              <select
+                value={edit.dow}
+                onChange={(e) => updateEdit({ dow: e.target.value })}
+                className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              >
+                {DOW_NAMES.map((name, i) => (
+                  <option key={i} value={String(i)}>{name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Time (HH:MM)</label>
+              <input
+                type="time"
+                value={edit.weekTime}
+                onChange={(e) => updateEdit({ weekTime: e.target.value })}
+                className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </>
+        );
+      case 'monthly':
+        return (
+          <>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Day of Month (1–31)</label>
+              <input
+                type="number"
+                min={1}
+                max={31}
+                value={edit.monthDay}
+                onChange={(e) => updateEdit({ monthDay: e.target.value })}
+                className="w-20 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Time (HH:MM)</label>
+              <input
+                type="time"
+                value={edit.monthTime}
+                onChange={(e) => updateEdit({ monthTime: e.target.value })}
+                className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </>
+        );
+      case 'hourly':
+        return (
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">At Minute (0–59)</label>
+            <input
+              type="number"
+              min={0}
+              max={59}
+              value={edit.hourMinute}
+              onChange={(e) => updateEdit({ hourMinute: e.target.value })}
+              className="w-24 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            />
+          </div>
+        );
+      case 'minutely':
+        return (
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Every N Minutes (1–60)</label>
+            <input
+              type="number"
+              min={1}
+              max={60}
+              value={edit.intervalMins}
+              onChange={(e) => updateEdit({ intervalMins: e.target.value })}
+              className="w-24 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            />
+          </div>
+        );
+      case 'interval':
+        return (
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Interval (minutes)</label>
+            <input
+              type="number"
+              min={1}
+              value={edit.intervalMins}
+              onChange={(e) => updateEdit({ intervalMins: e.target.value })}
+              className="w-24 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            />
+          </div>
+        );
+      case 'startup':
+        return (
+          <div className="flex-1 flex items-center text-xs text-gray-400">
+            Runs once at application startup — no time value needed.
+          </div>
+        );
+      default:
+        return null;
+    }
   };
 
   return (
@@ -64,21 +349,32 @@ const SchedulerPage: React.FC = () => {
               <th className="text-left p-4">Type</th>
               <th className="text-left p-4">Value</th>
               <th className="text-left p-4">Next Run</th>
+              <th className="text-left p-4">Status</th>
               <th className="text-left p-4">Enabled</th>
               <th className="text-left p-4">Actions</th>
             </tr>
           </thead>
           <tbody>
             {tasks.length === 0 && (
-              <tr><td colSpan={6} className="p-8 text-center text-gray-400">No tasks found</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-gray-400">No tasks found</td></tr>
             )}
             {tasks.map((task) => (
               <React.Fragment key={task.id}>
                 <tr className="border-b border-gray-700 hover:bg-gray-700 transition-colors">
                   <td className="p-4 font-medium">{task.name}</td>
                   <td className="p-4 text-gray-400">{task.schedule_type}</td>
-                  <td className="p-4 text-gray-400">{task.schedule_value || '—'}</td>
-                  <td className="p-4 text-gray-400">{getNextRun(task)}</td>
+                  <td className="p-4 text-gray-400 max-w-xs truncate">{task.schedule_value || '—'}</td>
+                  <td className="p-4 text-gray-400">{getNextRunLabel(task)}</td>
+                  <td className="p-4">
+                    {runningTaskIds.has(task.id) ? (
+                      <span className="inline-flex items-center gap-1.5 text-green-400 text-xs font-medium">
+                        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                        Running
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-500">Idle</span>
+                    )}
+                  </td>
                   <td className="p-4">
                     <button
                       onClick={() => handleToggle(task)}
@@ -91,35 +387,25 @@ const SchedulerPage: React.FC = () => {
                     <button onClick={() => handleEdit(task)} className="text-blue-400 hover:text-blue-300 text-sm">Edit</button>
                   </td>
                 </tr>
-                {editingId === task.id && (
+                {editingId === task.id && editState && (
                   <tr className="bg-gray-750 border-b border-gray-700">
-                    <td colSpan={6} className="p-4">
-                      <div className="flex items-end gap-4">
+                    <td colSpan={7} className="p-4">
+                      <div className="flex items-end gap-4 flex-wrap">
                         <div>
                           <label className="block text-xs text-gray-400 mb-1">Schedule Type</label>
                           <select
-                            value={scheduleType}
-                            onChange={(e) => setScheduleType(e.target.value as Task['schedule_type'])}
+                            value={editState.type}
+                            onChange={(e) => updateEdit({ type: e.target.value as ScheduleType })}
                             className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
                           >
-                            {(['once','daily','weekly','monthly','interval','startup'] as Task['schedule_type'][]).map((t) => (
+                            {ALL_TYPES.map((t) => (
                               <option key={t} value={t}>{t}</option>
                             ))}
                           </select>
                         </div>
-                        {scheduleType !== 'startup' && (
-                          <div className="flex-1">
-                            <label className="block text-xs text-gray-400 mb-1">{scheduleValueLabel[scheduleType]}</label>
-                            <input
-                              value={scheduleValue}
-                              onChange={(e) => setScheduleValue(e.target.value)}
-                              placeholder={scheduleValueLabel[scheduleType]}
-                              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                            />
-                          </div>
-                        )}
+                        {renderSchedulePicker(editState)}
                         <button onClick={() => handleSave(task.id)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">Save</button>
-                        <button onClick={() => setEditingId(null)} className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm">Cancel</button>
+                        <button onClick={() => { setEditingId(null); setEditState(null); }} className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm">Cancel</button>
                       </div>
                     </td>
                   </tr>
