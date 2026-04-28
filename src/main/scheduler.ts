@@ -8,7 +8,7 @@ import type { Task, TaskStep } from '../shared/types';
 const scheduledTasks = new Map<number, cron.ScheduledTask>();
 const runningScheduledProcesses = new Map<number, { proc: ChildProcess; runId: number }>();
 let mainWindowRef: BrowserWindow | null = null;
-let pythonPathRef = 'python';
+let pythonPathRef = 'python3';
 let runningCount = 0;
 const MAX_CONCURRENCY = 3;
 
