@@ -11,6 +11,7 @@ import json
 import logging
 import threading
 import time
+import webbrowser
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,7 @@ class PopupWatcher:
             action = rule.get("action", "click_button")
             button_title = rule.get("button_title", "OK").strip() or "OK"
             linked_task_id = str(rule.get("linked_task_id", "")).strip()
+            url = str(rule.get("url", "")).strip()
 
             if not title_sub:
                 continue  # rule must have a title filter
@@ -162,7 +164,7 @@ class PopupWatcher:
                         "action": action,
                     }), flush=True)
 
-                    self._handle_popup(win, win_title, action, button_title, linked_task_id)
+                    self._handle_popup(win, win_title, action, button_title, linked_task_id, url)
 
                 except Exception as exc:
                     logger.debug(f"PopupWatcher: error inspecting window: {exc}")
@@ -189,6 +191,7 @@ class PopupWatcher:
         action: str,
         button_title: str,
         linked_task_id: str,
+        url: str = "",
     ):
         """Perform the configured handler action on a matched popup window."""
         # Bring the dialog to the foreground first
@@ -198,7 +201,9 @@ class PopupWatcher:
         except Exception as exc:
             logger.debug(f"PopupWatcher: set_focus failed: {exc}")
 
-        if action == "run_task" and linked_task_id:
+        if action == "open_url" and url:
+            self._open_url(win_title, url)
+        elif action == "run_task" and linked_task_id:
             self._run_linked_task(win_title, linked_task_id)
         else:
             # Default: click the configured button (usually "OK")
@@ -224,6 +229,29 @@ class PopupWatcher:
                 "title": win_title,
                 "action": "click_button",
                 "button": button_title,
+                "success": False,
+                "message": str(exc),
+            }), flush=True)
+
+    def _open_url(self, win_title: str, url: str):
+        """Open *url* in the default system browser."""
+        try:
+            webbrowser.open(url)
+            logger.info(f"PopupWatcher: opened URL '{url}' triggered by popup '{win_title}'")
+            print(json.dumps({
+                "event": "popup_handled",
+                "title": win_title,
+                "action": "open_url",
+                "url": url,
+                "success": True,
+            }), flush=True)
+        except Exception as exc:
+            logger.error(f"PopupWatcher: failed to open URL '{url}': {exc}")
+            print(json.dumps({
+                "event": "popup_handled",
+                "title": win_title,
+                "action": "open_url",
+                "url": url,
                 "success": False,
                 "message": str(exc),
             }), flush=True)
