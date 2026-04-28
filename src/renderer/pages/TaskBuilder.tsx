@@ -1347,32 +1347,42 @@ const TaskBuilder: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">Window Title Contains <span className="text-red-400">*</span></label>
+                        <label htmlFor={`rule-title-${ri}`} className="block text-xs text-gray-400 mb-1">Window Title Contains <span className="text-red-400">*</span></label>
                         <input
+                          id={`rule-title-${ri}`}
                           type="text"
-                          value={rule.title_substring}
+                          value={rule.title_substring ?? ''}
                           onChange={(e) => {
-                            const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[])];
-                            rules[ri] = { ...rules[ri], title_substring: e.target.value };
-                            setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
+                            const value = e.target.value;
+                            setEditingStep((prev) => {
+                              if (!prev) return null;
+                              const rules = [...(prev.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[])];
+                              rules[ri] = { ...rules[ri], title_substring: value };
+                              return { ...prev, config: { ...prev.config, rules } };
+                            });
                           }}
                           placeholder='e.g. Idle timer expired'
-                          className="w-full bg-gray-600 border border-gray-500 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                          className="w-full bg-gray-600 border border-gray-500 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">Message/Text Contains (optional)</label>
+                        <label htmlFor={`rule-text-${ri}`} className="block text-xs text-gray-400 mb-1">Message/Text Contains (optional)</label>
                         <input
+                          id={`rule-text-${ri}`}
                           type="text"
-                          value={rule.text_contains}
+                          value={rule.text_contains ?? ''}
                           onChange={(e) => {
-                            const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[])];
-                            rules[ri] = { ...rules[ri], text_contains: e.target.value };
-                            setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
+                            const value = e.target.value;
+                            setEditingStep((prev) => {
+                              if (!prev) return null;
+                              const rules = [...(prev.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[])];
+                              rules[ri] = { ...rules[ri], text_contains: value };
+                              return { ...prev, config: { ...prev.config, rules } };
+                            });
                           }}
                           placeholder='e.g. Session has been idle'
-                          className="w-full bg-gray-600 border border-gray-500 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                          className="w-full bg-gray-600 border border-gray-500 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
                         />
                       </div>
 
