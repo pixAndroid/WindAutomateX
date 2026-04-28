@@ -32,6 +32,9 @@ const api: ElectronAPI = {
     stop: (taskId) => ipcRenderer.invoke('task:stop', taskId),
     pause: (taskId) => ipcRenderer.invoke('task:pause', taskId),
   },
+  scheduler: {
+    stopTask: (taskId) => ipcRenderer.invoke('scheduler:stopTask', taskId),
+  },
   onRunUpdate: (callback) => {
     ipcRenderer.on('run:update', callback);
   },

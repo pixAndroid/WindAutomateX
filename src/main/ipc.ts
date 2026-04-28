@@ -9,6 +9,7 @@ import {
   getSettings, saveSettings,
 } from './database';
 import type { Task, TaskStep, Credential, Settings } from '../shared/types';
+import { stopScheduledTask } from './scheduler';
 
 const runningProcesses = new Map<number, ChildProcess>();
 
@@ -294,6 +295,10 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
       updateRun(runId, { status: 'stopped', ended_at: new Date().toISOString() });
       runningProcesses.delete(runId);
     }
+  });
+
+  ipcMain.handle('scheduler:stopTask', (_e, taskId: number) => {
+    stopScheduledTask(taskId);
   });
 
   ipcMain.handle('task:pause', (_e, _runId: number) => {
