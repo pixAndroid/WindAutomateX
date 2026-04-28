@@ -83,6 +83,8 @@ class TaskExecutor:
 
             self._apply_step_delay(step)
 
+        logger.info(f"Task {task_id} completed all {total} steps")
+        self._wait_for_popup_watcher(task_id)
         logger.info(f"Task {task_id} completed successfully")
         print(json.dumps({"status": "completed", "task_id": task_id, "steps_run": total}), flush=True)
         self.engine.stop_popup_watcher()
@@ -290,6 +292,11 @@ class TaskExecutor:
             self._apply_step_delay(step)
 
         logger.info(
+            f"Task {task_id} completed all rows: {rows_succeeded}/{total_rows} rows succeeded, "
+            f"{rows_failed} failed"
+        )
+        self._wait_for_popup_watcher(task_id)
+        logger.info(
             f"Task {task_id} completed: {rows_succeeded}/{total_rows} rows succeeded, "
             f"{rows_failed} failed"
         )
@@ -309,6 +316,30 @@ class TaskExecutor:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _wait_for_popup_watcher(self, task_id: int) -> None:
+        """Block until the active popup watcher has stopped, if one is running.
+
+        A "continuous" watcher will block here until the task is externally
+        stopped (e.g. via SIGTERM when the user clicks Stop).  A "once"-only
+        watcher will have already stopped itself once all its rules have fired,
+        so this call returns immediately in that case.
+        """
+        watcher = self.engine.active_popup_watcher
+        if not (watcher and watcher.is_running()):
+            return
+
+        logger.info(f"Task {task_id}: popup watcher active — keeping task alive until stopped")
+        print(json.dumps({
+            "status": "running",
+            "task_id": task_id,
+            "message": "Popup watcher active — task running continuously until stopped",
+        }), flush=True)
+        try:
+            while watcher.is_running():
+                time.sleep(0.5)
+        except (KeyboardInterrupt, SystemExit):
+            pass
 
     @staticmethod
     def _apply_step_delay(step: dict) -> None:

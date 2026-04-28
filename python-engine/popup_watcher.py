@@ -119,6 +119,21 @@ class PopupWatcher:
     def _run(self):
         """Main polling loop — runs in a daemon thread."""
         while not self._stop_event.is_set():
+            # When every rule has monitor_mode "once" and has already fired,
+            # there is nothing left to watch — stop automatically so that the
+            # parent task can complete normally.
+            if len(self.rules) > 0 and all(
+                rule.get("monitor_mode", "continuous") == "once"
+                and i in self._completed_once_rules
+                for i, rule in enumerate(self.rules)
+            ):
+                logger.info("PopupWatcher: all once-rules have fired — stopping automatically")
+                print(json.dumps({
+                    "event": "popup_watcher",
+                    "status": "all_rules_done",
+                    "message": "All once-rules have fired — watcher stopped automatically",
+                }), flush=True)
+                break
             try:
                 self._check_popups()
             except Exception as exc:
