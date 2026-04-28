@@ -102,7 +102,7 @@ export function scheduleTask(task: Task): void {
       // schedule_value = interval in minutes (1-59), e.g. "5" runs every 5 minutes
       if (task.schedule_value) {
         const intervalMin = parseInt(task.schedule_value, 10);
-        if (!isNaN(intervalMin) && intervalMin > 0 && intervalMin < 60) {
+        if (!isNaN(intervalMin) && intervalMin > 0 && intervalMin <= 60) {
           cronExpression = `*/${intervalMin} * * * *`;
         } else {
           cronExpression = `* * * * *`;

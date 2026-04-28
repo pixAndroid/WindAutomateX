@@ -128,8 +128,10 @@ function getNextRunLabel(task: Task): string {
     }
     case 'hourly':
       return v !== '' ? `Hourly at :${v.padStart(2, '0')}` : 'Hourly at :00';
-    case 'minutely':
-      return v && parseInt(v, 10) > 1 ? `Every ${v} minutes` : 'Every minute';
+    case 'minutely': {
+      const mins = v ? parseInt(v, 10) : 1;
+      return mins === 1 ? 'Every minute' : `Every ${mins} minutes`;
+    }
     case 'interval':
       return v ? `Every ${v} min` : 'Scheduled';
     default:
@@ -301,11 +303,11 @@ const SchedulerPage: React.FC = () => {
       case 'minutely':
         return (
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Every N Minutes (1–59)</label>
+            <label className="block text-xs text-gray-400 mb-1">Every N Minutes (1–60)</label>
             <input
               type="number"
               min={1}
-              max={59}
+              max={60}
               value={edit.intervalMins}
               onChange={(e) => updateEdit({ intervalMins: e.target.value })}
               className="w-24 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
