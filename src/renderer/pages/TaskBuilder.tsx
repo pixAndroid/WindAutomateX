@@ -1408,14 +1408,14 @@ const TaskBuilder: React.FC = () => {
                           <label className="block text-xs text-gray-400 mb-1">Button Title</label>
                           <input
                             type="text"
-                            value={rule.button_title}
+                            value={rule.button_title ?? ''}
                             onChange={(e) => {
                               const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[])];
                               rules[ri] = { ...rules[ri], button_title: e.target.value };
                               setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
                             }}
                             placeholder='OK'
-                            className="w-full bg-gray-600 border border-gray-500 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                            className="w-full bg-gray-600 border border-gray-500 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
                           />
                         </div>
                       )}
