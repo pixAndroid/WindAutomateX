@@ -643,9 +643,10 @@ class WindAutomateXEngine:
         rules            (list)  – List of rule dicts:
             title_substring (str) – Window title must contain this (required).
             text_contains   (str) – Optional; any child control text must contain this.
-            action          (str) – "click_button" (default) or "run_task".
+            action          (str) – "click_button" (default), "run_task", or "open_url".
             button_title    (str) – Button to click. Default "OK".
             linked_task_id  (str) – Task ID to run when action == "run_task".
+            url             (str) – URL to open when action == "open_url".
         """
         from popup_watcher import PopupWatcher
 
