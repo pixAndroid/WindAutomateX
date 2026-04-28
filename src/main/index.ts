@@ -1,8 +1,21 @@
 import { app, BrowserWindow, shell } from 'electron';
 import path from 'path';
+import { spawnSync } from 'child_process';
 import { initDatabase } from './database';
 import { setupIPC, stopAllProcesses } from './ipc';
 import { initScheduler } from './scheduler';
+
+function resolvePythonPath(): string {
+  for (const candidate of ['python3', 'python']) {
+    try {
+      const result = spawnSync(candidate, ['--version'], { timeout: 3000 });
+      if (result.status === 0) return candidate;
+    } catch {
+      // try next candidate
+    }
+  }
+  return 'python3';
+}
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -51,8 +64,9 @@ app.whenReady().then(() => {
   createWindow();
 
   if (mainWindow) {
-    setupIPC(mainWindow, 'python');
-    initScheduler(mainWindow, 'python');
+    const pythonPath = resolvePythonPath();
+    setupIPC(mainWindow, pythonPath);
+    initScheduler(mainWindow, pythonPath);
   }
 
   app.on('activate', () => {

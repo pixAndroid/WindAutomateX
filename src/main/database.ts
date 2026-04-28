@@ -27,8 +27,11 @@ export function initDatabase(userDataPath: string): void {
   if (!existingSettings) {
     db.prepare(`
       INSERT INTO settings (id, theme, download_folder, python_path, auto_start, notifications)
-      VALUES (1, 'dark', '', 'python', 0, 1)
+      VALUES (1, 'dark', '', '', 0, 1)
     `).run();
+  } else {
+    // Migrate: reset the old default 'python' so runtime detection takes over
+    db.prepare(`UPDATE settings SET python_path = '' WHERE id = 1 AND python_path = 'python'`).run();
   }
 }
 
@@ -75,7 +78,7 @@ function createTables(): void {
       id INTEGER PRIMARY KEY DEFAULT 1,
       theme TEXT DEFAULT 'dark',
       download_folder TEXT DEFAULT '',
-      python_path TEXT DEFAULT 'python',
+      python_path TEXT DEFAULT '',
       auto_start INTEGER DEFAULT 0,
       notifications INTEGER DEFAULT 1
     );

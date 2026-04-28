@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY DEFAULT 1,
   theme TEXT DEFAULT 'dark',
   download_folder TEXT DEFAULT '',
-  python_path TEXT DEFAULT 'python',
+  python_path TEXT DEFAULT '',
   auto_start INTEGER DEFAULT 0,
   notifications INTEGER DEFAULT 1
 );

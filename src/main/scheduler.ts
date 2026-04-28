@@ -8,7 +8,7 @@ import type { Task, TaskStep } from '../shared/types';
 const scheduledTasks = new Map<number, cron.ScheduledTask>();
 const runningScheduledProcesses = new Map<number, { proc: ChildProcess; runId: number }>();
 let mainWindowRef: BrowserWindow | null = null;
-let pythonPathRef = 'python';
+let pythonPathRef = '';
 let runningCount = 0;
 const MAX_CONCURRENCY = 3;
 
@@ -179,7 +179,8 @@ async function runTask(taskId: number, retryCount = 0): Promise<void> {
   }
 
   const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
-  const proc = spawn(pythonPathRef, [enginePath], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const python = pythonPathRef || 'python3';
+  const proc = spawn(python, [enginePath], { stdio: ['pipe', 'pipe', 'pipe'] });
 
   runningScheduledProcesses.set(taskId, { proc, runId: run.id });
 
