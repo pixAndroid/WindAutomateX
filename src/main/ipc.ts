@@ -20,6 +20,7 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
   ipcMain.handle('tasks:get', (_e, id: number) => getTask(id));
   ipcMain.handle('tasks:create', (_e, task: Omit<Task, 'id' | 'created_at' | 'updated_at'>) => createTask(task));
   ipcMain.handle('tasks:update', (_e, id: number, task: Partial<Task>) => {
+    const originalTask = getTask(id);
     const updatedTask = updateTask(id, task);
     if (task.enabled !== undefined) {
       if (task.enabled) {
@@ -27,6 +28,12 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
       } else {
         unscheduleTask(id);
       }
+    } else if (updatedTask.enabled && (
+      (task.schedule_type !== undefined && task.schedule_type !== originalTask?.schedule_type) ||
+      (task.schedule_value !== undefined && task.schedule_value !== originalTask?.schedule_value)
+    )) {
+      // Re-schedule with new values when schedule actually changes on an already-enabled task
+      scheduleTask(updatedTask);
     }
     return updatedTask;
   });
