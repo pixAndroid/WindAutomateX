@@ -561,10 +561,12 @@ class WindAutomateXEngine:
 
         # --- Attempt 1: pywinauto Desktop ---
         if self.pywinauto_available:
+            import re
             from pywinauto import Desktop
+            title_pattern = f".*{re.escape(window_title)}.*"
             while time.time() < deadline:
                 try:
-                    windows = Desktop(backend="uia").windows(title_re=f".*{window_title}.*")
+                    windows = Desktop(backend="uia").windows(title_re=title_pattern)
                     if windows:
                         windows[0].set_focus()
                         WaitUtils.wait_seconds(_WINDOW_SETTLE_DELAY_SECONDS)
