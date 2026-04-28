@@ -85,7 +85,7 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
       }
       const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
       const settings = getSettings();
-      const python = settings.python_path || pythonPath || 'python3';
+      const python = settings.python_path || pythonPath || (process.platform === 'win32' ? 'python' : 'python3');
       const proc = spawn(python, [enginePath], { stdio: ['pipe', 'pipe', 'pipe'] });
       let output = '';
       proc.stdout.on('data', (data: Buffer) => { output += data.toString(); });
@@ -179,7 +179,7 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
 
     const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
     const settings = getSettings();
-    const python = settings.python_path || pythonPath || 'python3';
+    const python = settings.python_path || pythonPath || (process.platform === 'win32' ? 'python' : 'python3');
 
     const capturedPath = await new Promise<string | null>((resolve) => {
       const proc = spawn(python, [enginePath], { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -227,7 +227,7 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
 
     const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
     const settings = getSettings();
-    const python = settings.python_path || pythonPath || 'python3';
+    const python = settings.python_path || pythonPath || (process.platform === 'win32' ? 'python' : 'python3');
 
     const proc = spawn(python, [enginePath], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -267,6 +267,25 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
       const line = data.toString();
       logBuffer += line;
       mainWindow.webContents.send('log:update', { runId: run.id, line });
+    });
+
+    proc.on('error', (err: Error) => {
+      const line = `Failed to start Python process: ${err.message}\n`;
+      logBuffer += line;
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('log:update', { runId: run.id, line });
+      }
+      const endedRun = updateRun(run.id, {
+        status: 'failed',
+        ended_at: new Date().toISOString(),
+        log_text: logBuffer,
+      });
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('run:update', endedRun);
+        mainWindow.restore();
+        mainWindow.show();
+      }
+      runningProcesses.delete(run.id);
     });
 
     proc.on('close', (code: number) => {

@@ -179,7 +179,7 @@ async function runTask(taskId: number, retryCount = 0): Promise<void> {
   }
 
   const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
-  const python = pythonPathRef || 'python3';
+  const python = pythonPathRef || (process.platform === 'win32' ? 'python' : 'python3');
   const proc = spawn(python, [enginePath], { stdio: ['pipe', 'pipe', 'pipe'] });
 
   runningScheduledProcesses.set(taskId, { proc, runId: run.id });
@@ -197,6 +197,22 @@ async function runTask(taskId: number, retryCount = 0): Promise<void> {
 
   proc.stderr.on('data', (data: Buffer) => {
     logBuffer += data.toString();
+  });
+
+  proc.on('error', (err: Error) => {
+    runningCount--;
+    runningScheduledProcesses.delete(taskId);
+    const errMsg = `Failed to start Python process: ${err.message}\n`;
+    logBuffer += errMsg;
+    updateRun(run.id, {
+      status: 'failed',
+      ended_at: new Date().toISOString(),
+      log_text: logBuffer,
+    });
+    if (mainWindowRef) {
+      mainWindowRef.webContents.send('run:update', { ...run, status: 'failed' });
+      mainWindowRef.webContents.send('log:update', { runId: run.id, line: errMsg });
+    }
   });
 
   proc.on('close', (code: number) => {

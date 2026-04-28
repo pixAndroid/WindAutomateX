@@ -6,15 +6,18 @@ import { setupIPC, stopAllProcesses } from './ipc';
 import { initScheduler } from './scheduler';
 
 function resolvePythonPath(): string {
-  for (const candidate of ['python3', 'python']) {
+  const candidates = process.platform === 'win32'
+    ? ['python', 'python3']
+    : ['python3', 'python'];
+  for (const candidate of candidates) {
     try {
       const result = spawnSync(candidate, ['--version'], { timeout: 3000 });
-      if (result.status === 0) return candidate;
+      if (!result.error && result.status === 0) return candidate;
     } catch {
       // try next candidate
     }
   }
-  return 'python3';
+  return process.platform === 'win32' ? 'python' : 'python3';
 }
 
 let mainWindow: BrowserWindow | null = null;
