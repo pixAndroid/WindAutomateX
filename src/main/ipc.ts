@@ -85,7 +85,7 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
       }
       const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
       const settings = getSettings();
-      const python = settings.python_path || pythonPath;
+      const python = settings.python_path || pythonPath || 'python3';
       const proc = spawn(python, [enginePath], { stdio: ['pipe', 'pipe', 'pipe'] });
       let output = '';
       proc.stdout.on('data', (data: Buffer) => { output += data.toString(); });
@@ -179,7 +179,7 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
 
     const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
     const settings = getSettings();
-    const python = settings.python_path || pythonPath;
+    const python = settings.python_path || pythonPath || 'python3';
 
     const capturedPath = await new Promise<string | null>((resolve) => {
       const proc = spawn(python, [enginePath], { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -227,7 +227,7 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
 
     const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
     const settings = getSettings();
-    const python = settings.python_path || pythonPath;
+    const python = settings.python_path || pythonPath || 'python3';
 
     const proc = spawn(python, [enginePath], {
       stdio: ['pipe', 'pipe', 'pipe'],
