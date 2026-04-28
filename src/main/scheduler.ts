@@ -16,6 +16,14 @@ export function initScheduler(mainWindow: BrowserWindow, pythonPath: string): vo
   mainWindowRef = mainWindow;
   pythonPathRef = pythonPath;
   loadAndScheduleAll();
+
+  // Run startup tasks once after initialization
+  const tasks = getTasks();
+  for (const task of tasks) {
+    if (task.enabled && task.schedule_type === 'startup') {
+      setTimeout(() => runTask(task.id), 5000);
+    }
+  }
 }
 
 export function loadAndScheduleAll(): void {
@@ -45,8 +53,7 @@ export function scheduleTask(task: Task): void {
 
   switch (task.schedule_type) {
     case 'startup':
-      // Run immediately at startup
-      setTimeout(() => runTask(task.id), 5000);
+      // Only runs at actual app startup via initScheduler, not on UI toggle/save
       return;
     case 'once':
       // Parse ISO date string
