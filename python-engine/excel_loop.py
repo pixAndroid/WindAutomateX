@@ -595,8 +595,6 @@ def run_excel_form_loop(config: dict, engine) -> dict:
     submit_actions = config.get("submitActions") or []
     if not submit_actions and not config.get("submitSelector"):
         return {"success": False, "message": "At least one submit action is required"}
-    if not config.get("mappings"):
-        return {"success": False, "message": "At least one field mapping is required"}
 
     # Load rows
     try:
