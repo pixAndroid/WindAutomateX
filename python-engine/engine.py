@@ -385,20 +385,54 @@ class WindAutomateXEngine:
             else:
                 pil_img = pyautogui.screenshot()
 
-            # Convert PIL image to OpenCV BGR
+            # Convert PIL image to OpenCV and then to grayscale for robust matching.
+            # Grayscale avoids false negatives caused by minor color rendering
+            # differences (sub-pixel font rendering, anti-aliasing, etc.).
             screen_np = np.array(pil_img)
             screen_bgr = cv2.cvtColor(screen_np, cv2.COLOR_RGB2BGR)
+            screen_gray = cv2.cvtColor(screen_bgr, cv2.COLOR_BGR2GRAY)
 
-            # Load template image
+            # Load template image and convert to grayscale
             template_bgr = cv2.imread(template_path, cv2.IMREAD_COLOR)
             if template_bgr is None:
                 return {"success": False, "message": f"detect_image: failed to load template: {template_path}"}
+            template_gray = cv2.cvtColor(template_bgr, cv2.COLOR_BGR2GRAY)
 
-            # Run template matching (normalised cross-correlation)
-            result_mat = cv2.matchTemplate(screen_bgr, template_bgr, cv2.TM_CCOEFF_NORMED)
-            _, max_val, _, max_loc = cv2.minMaxLoc(result_mat)
+            # Multi-scale template matching to handle DPI / resolution differences
+            # between the captured template and the live screenshot.  On Windows,
+            # display scaling (125%, 150%, 200%, ...) can cause pyautogui to return
+            # screenshots at a different pixel size than the saved template, producing
+            # near-zero correlation scores at 1x scale.  Trying a range of reciprocal
+            # scales ensures we cover the most common mismatches in both directions.
+            scales = [1.0, 0.5, 0.75, 0.8, 1.25, 1.5, 2.0]
 
-            score = float(max_val)
+            best_score = 0.0
+            best_loc = (0, 0)
+            best_scale = 1.0
+
+            for scale in scales:
+                if scale == 1.0:
+                    tmpl = template_gray
+                else:
+                    new_w = max(1, int(template_gray.shape[1] * scale))
+                    new_h = max(1, int(template_gray.shape[0] * scale))
+                    interp = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
+                    tmpl = cv2.resize(template_gray, (new_w, new_h), interpolation=interp)
+
+                # Skip scales where the resized template exceeds the screenshot
+                # dimensions (cv2.matchTemplate would raise an error).
+                if tmpl.shape[0] > screen_gray.shape[0] or tmpl.shape[1] > screen_gray.shape[1]:
+                    continue
+
+                result_mat = cv2.matchTemplate(screen_gray, tmpl, cv2.TM_CCOEFF_NORMED)
+                _, max_val, _, max_loc = cv2.minMaxLoc(result_mat)
+
+                if max_val > best_score:
+                    best_score = max_val
+                    best_loc = max_loc
+                    best_scale = scale
+
+            score = best_score
             matched = score >= threshold
 
             response: dict = {
@@ -409,10 +443,11 @@ class WindAutomateXEngine:
             }
 
             if matched:
-                th, tw = template_bgr.shape[:2]
+                th = int(template_bgr.shape[0] * best_scale)
+                tw = int(template_bgr.shape[1] * best_scale)
                 response["found"] = {
-                    "x": max_loc[0],
-                    "y": max_loc[1],
+                    "x": best_loc[0],
+                    "y": best_loc[1],
                     "w": tw,
                     "h": th,
                 }
