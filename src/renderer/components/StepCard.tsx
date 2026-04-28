@@ -117,12 +117,27 @@ const StepCard: React.FC<StepCardProps> = ({ step, index, total, isDragging, isD
       onDrop={onDrop}
       onDragEnd={onDragEnd}
       className={[
-        'bg-gray-700 rounded-lg p-3 flex items-center gap-3 group cursor-grab active:cursor-grabbing transition-opacity border-2',
+        'bg-gray-700 rounded-lg p-3 flex items-center gap-3 group transition-opacity border-2',
         isDragging ? 'opacity-40' : 'opacity-100',
         isDragOver ? 'border-blue-500' : 'border-transparent',
       ].join(' ')}
     >
-      <span className="text-gray-400 text-sm w-6 text-center">{index + 1}</span>
+      {/* Drag handle — always visible, indicates drag-to-reorder */}
+      <span
+        className="text-gray-500 hover:text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0 select-none"
+        aria-label="Drag to reorder"
+        role="img"
+      >
+        <svg width="12" height="18" viewBox="0 0 12 18" fill="currentColor">
+          <circle cx="3" cy="3"  r="1.5"/>
+          <circle cx="9" cy="3"  r="1.5"/>
+          <circle cx="3" cy="9"  r="1.5"/>
+          <circle cx="9" cy="9"  r="1.5"/>
+          <circle cx="3" cy="15" r="1.5"/>
+          <circle cx="9" cy="15" r="1.5"/>
+        </svg>
+      </span>
+      <span className="text-gray-400 text-sm w-6 text-center flex-shrink-0">{index + 1}</span>
       <span className="text-lg">{stepIcons[step.step_type]}</span>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-white">{stepLabels[step.step_type]}</p>
