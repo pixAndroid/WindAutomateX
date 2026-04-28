@@ -1,11 +1,12 @@
 import cron from 'node-cron';
 import { BrowserWindow } from 'electron';
 import { getTasks, getSteps, createRun, updateRun } from './database';
-import { spawn } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
-import type { Task } from '../shared/types';
+import type { Task, TaskStep } from '../shared/types';
 
 const scheduledTasks = new Map<number, cron.ScheduledTask>();
+const runningScheduledProcesses = new Map<number, { proc: ChildProcess; runId: number }>();
 let mainWindowRef: BrowserWindow | null = null;
 let pythonPathRef = 'python';
 let runningCount = 0;
@@ -137,6 +138,23 @@ export function unscheduleTask(taskId: number): void {
   }
 }
 
+export function stopScheduledTask(taskId: number): void {
+  const entry = runningScheduledProcesses.get(taskId);
+  if (entry) {
+    try {
+      entry.proc.kill('SIGTERM');
+    } catch {
+      // Process may have already exited
+    }
+    updateRun(entry.runId, { status: 'stopped', ended_at: new Date().toISOString() });
+    runningScheduledProcesses.delete(taskId);
+    runningCount = Math.max(0, runningCount - 1);
+    if (mainWindowRef) {
+      mainWindowRef.webContents.send('run:update', { id: entry.runId, task_id: taskId, status: 'stopped' });
+    }
+  }
+}
+
 async function runTask(taskId: number, retryCount = 0): Promise<void> {
   if (runningCount >= MAX_CONCURRENCY) {
     // Retry after 60 seconds
@@ -153,9 +171,20 @@ async function runTask(taskId: number, retryCount = 0): Promise<void> {
   runningCount++;
   let logBuffer = '';
 
+  // Build a map of all tasks' steps so the Python engine can execute run_task steps
+  const allTasks = getTasks();
+  const allTasksMap: Record<string, TaskStep[]> = {};
+  for (const t of allTasks) {
+    allTasksMap[String(t.id)] = getSteps(t.id);
+  }
+
   const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
   const proc = spawn(pythonPathRef, [enginePath], { stdio: ['pipe', 'pipe', 'pipe'] });
-  proc.stdin.write(JSON.stringify({ command: 'execute', task_id: taskId, steps: JSON.stringify(steps) }) + '\n');
+
+  runningScheduledProcesses.set(taskId, { proc, runId: run.id });
+
+  proc.stdin.write(JSON.stringify({ command: 'execute', task_id: taskId, steps: JSON.stringify(steps), all_tasks: allTasksMap }) + '\n');
+  proc.stdin.end();
 
   proc.stdout.on('data', (data: Buffer) => {
     const text = data.toString();
@@ -171,6 +200,7 @@ async function runTask(taskId: number, retryCount = 0): Promise<void> {
 
   proc.on('close', (code: number) => {
     runningCount--;
+    runningScheduledProcesses.delete(taskId);
     const status = code === 0 ? 'completed' : 'failed';
     updateRun(run.id, {
       status,

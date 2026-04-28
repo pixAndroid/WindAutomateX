@@ -207,6 +207,15 @@ const SchedulerPage: React.FC = () => {
     load();
   };
 
+  const handleStop = async (task: Task) => {
+    try {
+      await window.electronAPI.scheduler.stopTask(task.id);
+      showToast(`Task "${task.name}" stopped`, 'info');
+    } catch {
+      showToast(`Failed to stop task "${task.name}"`, 'error');
+    }
+  };
+
   const ALL_TYPES: ScheduleType[] = ['once', 'daily', 'weekly', 'monthly', 'hourly', 'minutely', 'interval', 'startup'];
 
   const renderSchedulePicker = (edit: EditState) => {
@@ -384,7 +393,18 @@ const SchedulerPage: React.FC = () => {
                     </button>
                   </td>
                   <td className="p-4">
-                    <button onClick={() => handleEdit(task)} className="text-blue-400 hover:text-blue-300 text-sm">Edit</button>
+                    <div className="flex items-center gap-2">
+                      {runningTaskIds.has(task.id) && (
+                        <button
+                          onClick={() => handleStop(task)}
+                          className="text-red-400 hover:text-red-300 text-sm font-medium"
+                          title="Stop running task"
+                        >
+                          Stop
+                        </button>
+                      )}
+                      <button onClick={() => handleEdit(task)} className="text-blue-400 hover:text-blue-300 text-sm">Edit</button>
+                    </div>
                   </td>
                 </tr>
                 {editingId === task.id && editState && (

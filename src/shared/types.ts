@@ -98,6 +98,9 @@ export interface ElectronAPI {
     stop: (taskId: number) => Promise<void>;
     pause: (taskId: number) => Promise<void>;
   };
+  scheduler: {
+    stopTask: (taskId: number) => Promise<void>;
+  };
   onRunUpdate: (callback: (event: Electron.IpcRendererEvent, run: Run) => void) => void;
   offRunUpdate: (callback: (event: Electron.IpcRendererEvent, run: Run) => void) => void;
   onLogUpdate: (callback: (event: Electron.IpcRendererEvent, data: { runId: number; line: string }) => void) => void;
