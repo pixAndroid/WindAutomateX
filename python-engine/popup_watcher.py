@@ -36,6 +36,8 @@ class PopupWatcher:
         action           (str)  – "click_button" (default) or "run_task".
         button_title     (str)  – button title to click (default "OK").
         linked_task_id   (str)  – task ID to run when action == "run_task".
+        monitor_mode     (str)  – "continuous" (default) keeps watching indefinitely;
+                                  "once" deactivates the rule after the first match.
     poll_interval_ms : int
         How often (in ms) to poll for windows. Default 300.
     engine : WindAutomateXEngine or None
@@ -49,6 +51,8 @@ class PopupWatcher:
         self.engine = engine
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+        # Tracks indices of rules whose monitor_mode is "once" and have already fired
+        self._completed_once_rules: set[int] = set()
 
     # ------------------------------------------------------------------
     # Public API
@@ -131,13 +135,18 @@ class PopupWatcher:
             logger.debug(f"PopupWatcher: failed to enumerate windows: {exc}")
             return
 
-        for rule in self.rules:
+        for rule_idx, rule in enumerate(self.rules):
+            # Skip rules that already fired in "once" mode
+            if rule_idx in self._completed_once_rules:
+                continue
+
             title_sub = rule.get("title_substring", "").strip()
             text_contains = rule.get("text_contains", "").strip()
             action = rule.get("action", "click_button")
             button_title = rule.get("button_title", "OK").strip() or "OK"
             linked_task_id = str(rule.get("linked_task_id", "")).strip()
             url = str(rule.get("url", "")).strip()
+            monitor_mode = rule.get("monitor_mode", "continuous")
 
             if not title_sub:
                 continue  # rule must have a title filter
@@ -156,15 +165,33 @@ class PopupWatcher:
                             continue
 
                     # ---- Match found ----
-                    logger.info(f"PopupWatcher: detected popup '{win_title}' — rule title='{title_sub}'")
+                    logger.info(f"PopupWatcher: detected popup '{win_title}' — rule title='{title_sub}' mode='{monitor_mode}'")
                     print(json.dumps({
                         "event": "popup_detected",
                         "title": win_title,
                         "rule_title": title_sub,
                         "action": action,
+                        "monitor_mode": monitor_mode,
                     }), flush=True)
 
                     self._handle_popup(win, win_title, action, button_title, linked_task_id, url)
+
+                    # Deactivate this rule after the first match when mode is "once"
+                    if monitor_mode == "once":
+                        self._completed_once_rules.add(rule_idx)
+                        logger.info(
+                            f"PopupWatcher: rule {rule_idx} (title='{title_sub}') set to 'once' — deactivated after first match"
+                        )
+                        print(json.dumps({
+                            "event": "popup_rule_done",
+                            "rule_index": rule_idx,
+                            "rule_title": title_sub,
+                            "monitor_mode": "once",
+                        }), flush=True)
+                        # Break the inner window loop: the rule has fired and is now
+                        # marked complete, so there is no need to inspect any further
+                        # windows for it within the same polling cycle.
+                        break
 
                 except Exception as exc:
                     logger.debug(f"PopupWatcher: error inspecting window: {exc}")

@@ -64,7 +64,7 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
   watch_popup: {
     enabled: true,
     poll_interval_ms: 300,
-    rules: [] as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string }[],
+    rules: [] as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[],
     delay: 60,
   },
 };
@@ -1332,13 +1332,13 @@ const TaskBuilder: React.FC = () => {
                 {/* Rules */}
                 <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider pt-1">Popup Rules</p>
                 <div className="space-y-3">
-                  {(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string }[]).map((rule, ri) => (
+                  {(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[]).map((rule, ri) => (
                     <div key={ri} className="bg-gray-700 rounded-lg p-3 space-y-2 border border-gray-600">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold text-blue-300">Rule {ri + 1}</span>
                         <button
                           onClick={() => {
-                            const rules = (editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string }[]).filter((_, i) => i !== ri);
+                            const rules = (editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[]).filter((_, i) => i !== ri);
                             setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
                           }}
                           className="text-red-400 hover:text-red-300 text-sm px-1"
@@ -1352,7 +1352,7 @@ const TaskBuilder: React.FC = () => {
                           type="text"
                           value={rule.title_substring}
                           onChange={(e) => {
-                            const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string }[])];
+                            const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[])];
                             rules[ri] = { ...rules[ri], title_substring: e.target.value };
                             setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
                           }}
@@ -1367,7 +1367,7 @@ const TaskBuilder: React.FC = () => {
                           type="text"
                           value={rule.text_contains}
                           onChange={(e) => {
-                            const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string }[])];
+                            const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[])];
                             rules[ri] = { ...rules[ri], text_contains: e.target.value };
                             setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
                           }}
@@ -1381,7 +1381,7 @@ const TaskBuilder: React.FC = () => {
                         <select
                           value={rule.action}
                           onChange={(e) => {
-                            const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string }[])];
+                            const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[])];
                             rules[ri] = { ...rules[ri], action: e.target.value };
                             setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
                           }}
@@ -1400,7 +1400,7 @@ const TaskBuilder: React.FC = () => {
                             type="text"
                             value={rule.button_title}
                             onChange={(e) => {
-                              const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string }[])];
+                              const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[])];
                               rules[ri] = { ...rules[ri], button_title: e.target.value };
                               setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
                             }}
@@ -1416,7 +1416,7 @@ const TaskBuilder: React.FC = () => {
                           <select
                             value={String(rule.linked_task_id ?? '')}
                             onChange={(e) => {
-                              const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string }[])];
+                              const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[])];
                               rules[ri] = { ...rules[ri], linked_task_id: e.target.value };
                               setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
                             }}
@@ -1441,7 +1441,7 @@ const TaskBuilder: React.FC = () => {
                             type="text"
                             value={rule.url ?? ''}
                             onChange={(e) => {
-                              const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string }[])];
+                              const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[])];
                               rules[ri] = { ...rules[ri], url: e.target.value };
                               setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
                             }}
@@ -1451,14 +1451,48 @@ const TaskBuilder: React.FC = () => {
                           <p className="text-xs text-gray-500 mt-1">Opens this URL in the default browser when the popup is detected.</p>
                         </div>
                       )}
+
+                      {/* Monitor Mode toggle */}
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Monitor Mode</label>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[])];
+                              rules[ri] = { ...rules[ri], monitor_mode: 'continuous' };
+                              setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
+                            }}
+                            className={`flex-1 px-2 py-1.5 rounded-lg text-xs border transition-colors ${(rule.monitor_mode ?? 'continuous') === 'continuous' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-600 border-gray-500 text-gray-300 hover:bg-gray-500'}`}
+                          >
+                            ♾ Continuous
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[])];
+                              rules[ri] = { ...rules[ri], monitor_mode: 'once' };
+                              setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
+                            }}
+                            className={`flex-1 px-2 py-1.5 rounded-lg text-xs border transition-colors ${rule.monitor_mode === 'once' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-600 border-gray-500 text-gray-300 hover:bg-gray-500'}`}
+                          >
+                            1× Once
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {rule.monitor_mode === 'once'
+                            ? 'Rule fires once — deactivated after the first match.'
+                            : 'Rule keeps monitoring for the entire task duration.'}
+                        </p>
+                      </div>
                     </div>
                   ))}
 
                   <button
                     onClick={() => {
                       const rules = [
-                        ...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string }[]),
-                        { title_substring: '', text_contains: '', action: 'click_button', button_title: 'OK', linked_task_id: '', url: '' },
+                        ...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[]),
+                        { title_substring: '', text_contains: '', action: 'click_button', button_title: 'OK', linked_task_id: '', url: '', monitor_mode: 'continuous' },
                       ];
                       setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
                     }}
@@ -1470,12 +1504,12 @@ const TaskBuilder: React.FC = () => {
                   {/* Quick-add built-in rule for "Idle timer expired" */}
                   <button
                     onClick={() => {
-                      const existing = editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string }[];
+                      const existing = editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; monitor_mode: string }[];
                       const alreadyAdded = existing.some((r) => r.title_substring === 'Idle timer expired');
                       if (!alreadyAdded) {
                         const rules = [
                           ...existing,
-                          { title_substring: 'Idle timer expired', text_contains: 'Session has been idle', action: 'click_button', button_title: 'OK', linked_task_id: '', url: '' },
+                          { title_substring: 'Idle timer expired', text_contains: 'Session has been idle', action: 'click_button', button_title: 'OK', linked_task_id: '', url: '', monitor_mode: 'continuous' },
                         ];
                         setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
                       }
