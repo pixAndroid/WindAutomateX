@@ -22,7 +22,7 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
   ipcMain.handle('tasks:update', (_e, id: number, task: Partial<Task>) => {
     const updatedTask = updateTask(id, task);
     if (task.enabled !== undefined) {
-      if (updatedTask.enabled) {
+      if (task.enabled) {
         scheduleTask(updatedTask);
       } else {
         unscheduleTask(id);
