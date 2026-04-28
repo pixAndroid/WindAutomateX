@@ -9,7 +9,7 @@ import {
   getSettings, saveSettings,
 } from './database';
 import type { Task, TaskStep, Credential, Settings } from '../shared/types';
-import { stopScheduledTask } from './scheduler';
+import { stopScheduledTask, scheduleTask, unscheduleTask } from './scheduler';
 
 const runningProcesses = new Map<number, ChildProcess>();
 
@@ -19,7 +19,17 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
   ipcMain.handle('tasks:list', () => getTasks());
   ipcMain.handle('tasks:get', (_e, id: number) => getTask(id));
   ipcMain.handle('tasks:create', (_e, task: Omit<Task, 'id' | 'created_at' | 'updated_at'>) => createTask(task));
-  ipcMain.handle('tasks:update', (_e, id: number, task: Partial<Task>) => updateTask(id, task));
+  ipcMain.handle('tasks:update', (_e, id: number, task: Partial<Task>) => {
+    const updatedTask = updateTask(id, task);
+    if (task.enabled !== undefined) {
+      if (updatedTask.enabled) {
+        scheduleTask(updatedTask);
+      } else {
+        unscheduleTask(id);
+      }
+    }
+    return updatedTask;
+  });
   ipcMain.handle('tasks:delete', (_e, id: number) => deleteTask(id));
 
   // Steps

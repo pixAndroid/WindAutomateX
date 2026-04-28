@@ -126,7 +126,7 @@ export function scheduleTask(task: Task): void {
   if (cronExpression) {
     const scheduled = cron.schedule(cronExpression, () => {
       runTask(task.id);
-    });
+    }, { runOnInit: false });
     scheduledTasks.set(task.id, scheduled);
   }
 }
