@@ -22,6 +22,13 @@ except Exception:
     PYWINAUTO_AVAILABLE = False
     logger.warning("pywinauto not available — popup watcher is disabled")
 
+try:
+    import pyautogui as _pyautogui  # noqa: F401
+    PYAUTOGUI_AVAILABLE = True
+except Exception:
+    PYAUTOGUI_AVAILABLE = False
+    logger.warning("pyautogui not available — keyboard_shortcut action disabled")
+
 
 class PopupWatcher:
     """
@@ -33,9 +40,11 @@ class PopupWatcher:
     rules : list of dicts, each with:
         title_substring  (str)  – window title must contain this (case-insensitive).
         text_contains    (str)  – optional; at least one child control must contain this text.
-        action           (str)  – "click_button" (default) or "run_task".
+        action           (str)  – "click_button" (default), "run_task", "open_url", or "keyboard_shortcut".
         button_title     (str)  – button title to click (default "OK").
         linked_task_id   (str)  – task ID to run when action == "run_task".
+        url              (str)  – URL to open when action == "open_url".
+        shortcut_keys    (str)  – keys to send when action == "keyboard_shortcut" (e.g. "alt+f4").
         monitor_mode     (str)  – "continuous" (default) keeps watching indefinitely;
                                   "once" deactivates the rule after the first match.
     poll_interval_ms : int
@@ -161,6 +170,7 @@ class PopupWatcher:
             button_title = rule.get("button_title", "OK").strip() or "OK"
             linked_task_id = str(rule.get("linked_task_id", "")).strip()
             url = str(rule.get("url", "")).strip()
+            shortcut_keys = str(rule.get("shortcut_keys", "")).strip()
             monitor_mode = rule.get("monitor_mode", "continuous")
 
             if not title_sub:
@@ -189,7 +199,7 @@ class PopupWatcher:
                         "monitor_mode": monitor_mode,
                     }), flush=True)
 
-                    self._handle_popup(win, win_title, action, button_title, linked_task_id, url)
+                    self._handle_popup(win, win_title, action, button_title, linked_task_id, url, shortcut_keys)
 
                     # Deactivate this rule after the first match when mode is "once"
                     if monitor_mode == "once":
@@ -234,6 +244,7 @@ class PopupWatcher:
         button_title: str,
         linked_task_id: str,
         url: str = "",
+        shortcut_keys: str = "",
     ):
         """Perform the configured handler action on a matched popup window."""
         # Bring the dialog to the foreground first
@@ -247,6 +258,8 @@ class PopupWatcher:
             self._open_url(win_title, url)
         elif action == "run_task" and linked_task_id:
             self._run_linked_task(win_title, linked_task_id)
+        elif action == "keyboard_shortcut" and shortcut_keys:
+            self._press_keyboard_shortcut(win_title, shortcut_keys)
         else:
             # Default: click the configured button (usually "OK")
             self._click_button(win, win_title, button_title)
@@ -271,6 +284,48 @@ class PopupWatcher:
                 "title": win_title,
                 "action": "click_button",
                 "button": button_title,
+                "success": False,
+                "message": str(exc),
+            }), flush=True)
+
+    def _press_keyboard_shortcut(self, win_title: str, shortcut_keys: str):
+        """Send a keyboard shortcut to the focused window using pyautogui."""
+        if not PYAUTOGUI_AVAILABLE:
+            logger.error("PopupWatcher: pyautogui not available — cannot send keyboard shortcut")
+            print(json.dumps({
+                "event": "popup_handled",
+                "title": win_title,
+                "action": "keyboard_shortcut",
+                "keys": shortcut_keys,
+                "success": False,
+                "message": "pyautogui not available",
+            }), flush=True)
+            return
+        try:
+            import pyautogui
+            keys = [k.strip() for k in shortcut_keys.split("+") if k.strip()]
+            if not keys:
+                logger.warning(f"PopupWatcher: shortcut_keys is empty for popup '{win_title}' — skipping")
+                return
+            if len(keys) == 1:
+                pyautogui.press(keys[0])
+            else:
+                pyautogui.hotkey(*keys)
+            logger.info(f"PopupWatcher: sent shortcut '{shortcut_keys}' for popup '{win_title}'")
+            print(json.dumps({
+                "event": "popup_handled",
+                "title": win_title,
+                "action": "keyboard_shortcut",
+                "keys": shortcut_keys,
+                "success": True,
+            }), flush=True)
+        except Exception as exc:
+            logger.error(f"PopupWatcher: failed to send shortcut '{shortcut_keys}' for '{win_title}': {exc}")
+            print(json.dumps({
+                "event": "popup_handled",
+                "title": win_title,
+                "action": "keyboard_shortcut",
+                "keys": shortcut_keys,
                 "success": False,
                 "message": str(exc),
             }), flush=True)
