@@ -84,9 +84,19 @@ const StepCard: React.FC<StepCardProps> = ({ step, index, total, isDragging, isD
     } else if (step.step_type === 'watch_popup') {
       const ruleCount = Array.isArray(config.rules) ? config.rules.length : 0;
       const enabled = config.enabled !== false;
-      configSummary = enabled
-        ? `${ruleCount} rule${ruleCount !== 1 ? 's' : ''} · ${config.poll_interval_ms ?? 300} ms interval`
-        : 'Disabled';
+      if (!enabled) {
+        configSummary = 'Disabled';
+      } else {
+        const onceModes = Array.isArray(config.rules)
+          ? (config.rules as { monitor_mode?: string }[]).filter((r) => r.monitor_mode === 'once').length
+          : 0;
+        const modeLabel = onceModes === ruleCount && ruleCount > 0
+          ? '1× once'
+          : onceModes > 0
+            ? `${onceModes} once / ${ruleCount - onceModes} ♾`
+            : '♾ continuous';
+        configSummary = `${ruleCount} rule${ruleCount !== 1 ? 's' : ''} · ${config.poll_interval_ms ?? 300} ms · ${modeLabel}`;
+      }
     } else {
       const entries = Object.entries(config).slice(0, 2);
       configSummary = entries.map(([k, v]) => `${k}: ${String(v)}`).join(', ');
