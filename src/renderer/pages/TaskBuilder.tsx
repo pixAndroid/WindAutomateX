@@ -17,7 +17,7 @@ const ALL_STEP_TYPES: StepType[] = [
   'type_text', 'press_key', 'keyboard_shortcut', 'select_dropdown', 'upload_file',
   'download_file', 'wait_download', 'wait_upload', 'read_text',
   'if_condition', 'loop', 'delay', 'screenshot', 'close_app', 'kill_process',
-  'excel_form_submit_loop', 'detect_image', 'run_task', 'switch_window',
+  'excel_form_submit_loop', 'detect_image', 'run_task', 'switch_window', 'watch_popup',
 ];
 
 const defaultConfig: Record<StepType, Record<string, unknown>> = {
@@ -61,6 +61,12 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
   detect_image: { template_path: '', threshold: 0.85, output_var: 'detected', on_success_task_id: '', on_failure_task_id: '', delay: 60 },
   run_task: { task_id: '', delay: 60 },
   switch_window: { window_title: '', timeout: 10, delay: 60 },
+  watch_popup: {
+    enabled: true,
+    poll_interval_ms: 300,
+    rules: [] as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string }[],
+    delay: 60,
+  },
 };
 
 interface EditingStep {
@@ -311,6 +317,7 @@ const TaskBuilder: React.FC = () => {
                     : t === 'detect_image' ? 'Detect Image (Window/Screen)'
                     : t === 'run_task' ? 'Run Linked Task'
                     : t === 'switch_window' ? 'Switch Window'
+                    : t === 'watch_popup' ? 'Watch Popup (Realtime Dialog Watcher)'
                     : t.replace(/_/g, ' ')}
                 </option>
               ))}
@@ -1276,6 +1283,192 @@ const TaskBuilder: React.FC = () => {
                   </select>
                   <p className="text-xs text-gray-500 mt-1">
                     When this step runs the selected task will execute completely before the parent task continues to the next step.
+                  </p>
+                </div>
+              </>
+            ) : editingStep.step.step_type === 'watch_popup' ? (
+              <>
+                <p className="text-xs text-gray-400 bg-gray-750 border border-blue-700 rounded-lg px-3 py-2">
+                  👁 <strong className="text-white">Watch Popup</strong> starts a background watcher that monitors for
+                  specific dialog windows by title/text using UI Automation (pywinauto). Place this step early in your
+                  task so the watcher runs for the entire task duration. It stops automatically when the task ends.
+                </p>
+
+                {/* Enabled toggle */}
+                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingStep.config.enabled ?? true)}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, enabled: e.target.checked } } : null
+                      )
+                    }
+                    className="accent-blue-500"
+                  />
+                  Enable Popup Watcher
+                </label>
+
+                {/* Poll interval */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Poll Interval (ms)</label>
+                  <input
+                    type="number"
+                    min={50}
+                    step={50}
+                    value={String(editingStep.config.poll_interval_ms ?? 300)}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, poll_interval_ms: Number(e.target.value) } } : null
+                      )
+                    }
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    How often (in ms) to check for popup windows. Default: 300 ms. Lower = faster detection, slightly more CPU.
+                  </p>
+                </div>
+
+                {/* Rules */}
+                <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider pt-1">Popup Rules</p>
+                <div className="space-y-3">
+                  {(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string }[]).map((rule, ri) => (
+                    <div key={ri} className="bg-gray-700 rounded-lg p-3 space-y-2 border border-gray-600">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-blue-300">Rule {ri + 1}</span>
+                        <button
+                          onClick={() => {
+                            const rules = (editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string }[]).filter((_, i) => i !== ri);
+                            setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
+                          }}
+                          className="text-red-400 hover:text-red-300 text-sm px-1"
+                          title="Remove rule"
+                        >✕</button>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Window Title Contains <span className="text-red-400">*</span></label>
+                        <input
+                          type="text"
+                          value={rule.title_substring}
+                          onChange={(e) => {
+                            const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string }[])];
+                            rules[ri] = { ...rules[ri], title_substring: e.target.value };
+                            setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
+                          }}
+                          placeholder='e.g. Idle timer expired'
+                          className="w-full bg-gray-600 border border-gray-500 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Message/Text Contains (optional)</label>
+                        <input
+                          type="text"
+                          value={rule.text_contains}
+                          onChange={(e) => {
+                            const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string }[])];
+                            rules[ri] = { ...rules[ri], text_contains: e.target.value };
+                            setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
+                          }}
+                          placeholder='e.g. Session has been idle'
+                          className="w-full bg-gray-600 border border-gray-500 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Action</label>
+                        <select
+                          value={rule.action}
+                          onChange={(e) => {
+                            const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string }[])];
+                            rules[ri] = { ...rules[ri], action: e.target.value };
+                            setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
+                          }}
+                          className="w-full bg-gray-600 border border-gray-500 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="click_button">Click Button</option>
+                          <option value="run_task">Run Linked Task</option>
+                        </select>
+                      </div>
+
+                      {rule.action !== 'run_task' && (
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">Button Title</label>
+                          <input
+                            type="text"
+                            value={rule.button_title}
+                            onChange={(e) => {
+                              const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string }[])];
+                              rules[ri] = { ...rules[ri], button_title: e.target.value };
+                              setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
+                            }}
+                            placeholder='OK'
+                            className="w-full bg-gray-600 border border-gray-500 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                      )}
+
+                      {rule.action === 'run_task' && (
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">Linked Task</label>
+                          <select
+                            value={String(rule.linked_task_id ?? '')}
+                            onChange={(e) => {
+                              const rules = [...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string }[])];
+                              rules[ri] = { ...rules[ri], linked_task_id: e.target.value };
+                              setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
+                            }}
+                            className="w-full bg-gray-600 border border-gray-500 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                          >
+                            <option value="">— Select a task —</option>
+                            {allTasks
+                              .filter((t) => String(t.id) !== id)
+                              .map((t) => (
+                                <option key={t.id} value={String(t.id)}>
+                                  {t.name} (#{t.id})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  <button
+                    onClick={() => {
+                      const rules = [
+                        ...(editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string }[]),
+                        { title_substring: '', text_contains: '', action: 'click_button', button_title: 'OK', linked_task_id: '' },
+                      ];
+                      setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
+                    }}
+                    className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                  >
+                    + Add Rule
+                  </button>
+
+                  {/* Quick-add built-in rule for "Idle timer expired" */}
+                  <button
+                    onClick={() => {
+                      const existing = editingStep.config.rules as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string }[];
+                      const alreadyAdded = existing.some((r) => r.title_substring === 'Idle timer expired');
+                      if (!alreadyAdded) {
+                        const rules = [
+                          ...existing,
+                          { title_substring: 'Idle timer expired', text_contains: 'Session has been idle', action: 'click_button', button_title: 'OK', linked_task_id: '' },
+                        ];
+                        setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, rules } } : null);
+                      }
+                    }}
+                    className="text-xs text-yellow-400 hover:text-yellow-300 flex items-center gap-1"
+                  >
+                    ⚡ Add built-in rule: "Idle timer expired → click OK"
+                  </button>
+
+                  <p className="text-xs text-gray-500">
+                    Each rule watches for a dialog whose title contains the specified text. When found, the watcher
+                    brings it to the foreground and performs the configured action. Runs concurrently with the task.
                   </p>
                 </div>
               </>

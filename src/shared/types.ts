@@ -40,7 +40,8 @@ export type StepType =
   | 'excel_form_submit_loop'
   | 'detect_image'
   | 'run_task'
-  | 'switch_window';
+  | 'switch_window'
+  | 'watch_popup';
 
 export interface Run {
   id: number;
