@@ -188,7 +188,10 @@ class PopupWatcher:
                             "rule_title": title_sub,
                             "monitor_mode": "once",
                         }), flush=True)
-                        break  # stop checking more windows for this rule
+                        # Break the inner window loop: the rule has fired and is now
+                        # marked complete, so there is no need to inspect any further
+                        # windows for it within the same polling cycle.
+                        break
 
                 except Exception as exc:
                     logger.debug(f"PopupWatcher: error inspecting window: {exc}")
