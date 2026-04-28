@@ -24,6 +24,7 @@ const stepIcons: Record<StepType, string> = {
   excel_form_submit_loop: '📊',
   detect_image: '🔍',
   run_task: '▶️',
+  switch_window: '🔄',
 };
 
 const stepLabels: Record<StepType, string> = {
@@ -49,6 +50,7 @@ const stepLabels: Record<StepType, string> = {
   excel_form_submit_loop: 'Excel Form Submit Loop',
   detect_image: 'Detect Image (Window)',
   run_task: 'Run Linked Task',
+  switch_window: 'Switch Window',
 };
 
 interface StepCardProps {

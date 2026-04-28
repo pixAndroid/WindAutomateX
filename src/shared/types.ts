@@ -39,7 +39,8 @@ export type StepType =
   | 'keyboard_shortcut'
   | 'excel_form_submit_loop'
   | 'detect_image'
-  | 'run_task';
+  | 'run_task'
+  | 'switch_window';
 
 export interface Run {
   id: number;
