@@ -17,7 +17,7 @@ const ALL_STEP_TYPES: StepType[] = [
   'type_text', 'press_key', 'keyboard_shortcut', 'select_dropdown', 'upload_file',
   'download_file', 'wait_download', 'wait_upload', 'read_text',
   'if_condition', 'loop', 'delay', 'screenshot', 'close_app', 'kill_process',
-  'excel_form_submit_loop', 'detect_image', 'run_task',
+  'excel_form_submit_loop', 'detect_image', 'run_task', 'switch_window',
 ];
 
 const defaultConfig: Record<StepType, Record<string, unknown>> = {
@@ -60,6 +60,7 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
   },
   detect_image: { template_path: '', threshold: 0.85, output_var: 'detected', on_success_task_id: '', on_failure_task_id: '', delay: 60 },
   run_task: { task_id: '', delay: 60 },
+  switch_window: { window_title: '', timeout: 10, delay: 60 },
 };
 
 interface EditingStep {
@@ -309,6 +310,7 @@ const TaskBuilder: React.FC = () => {
                   {t === 'excel_form_submit_loop' ? 'Excel Form Submit Loop (Business Automation)'
                     : t === 'detect_image' ? 'Detect Image (Window/Screen)'
                     : t === 'run_task' ? 'Run Linked Task'
+                    : t === 'switch_window' ? 'Switch Window'
                     : t.replace(/_/g, ' ')}
                 </option>
               ))}
@@ -1205,6 +1207,48 @@ const TaskBuilder: React.FC = () => {
                   </select>
                   <p className="text-xs text-gray-500 mt-1">
                     Task to run when the image is <strong className="text-gray-400">not found</strong>. Leave blank to continue to the next step.
+                  </p>
+                </div>
+              </>
+            ) : editingStep.step.step_type === 'switch_window' ? (
+              <>
+                <p className="text-xs text-gray-400 bg-gray-750 border border-gray-600 rounded-lg px-3 py-2">
+                  🔄 <strong className="text-white">Switch Window</strong> brings a running application to the foreground so subsequent steps can interact with it.
+                  Use this to switch from Chrome to File Explorer, or from any app to another.
+                </p>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Window Title</label>
+                  <input
+                    type="text"
+                    value={String(editingStep.config.window_title ?? '')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, window_title: e.target.value } } : null
+                      )
+                    }
+                    placeholder="e.g. File Explorer, Chrome, Notepad, Calculator"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter the full or partial title of the target window. For example, type <code className="text-gray-400">File Explorer</code> to switch to Windows Explorer, or <code className="text-gray-400">Chrome</code> to switch to Google Chrome.
+                    The match is case-insensitive and partial — any visible window whose title <em>contains</em> this text will be focused.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Timeout (seconds)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={String(editingStep.config.timeout ?? 10)}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, timeout: Number(e.target.value) } } : null
+                      )
+                    }
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    How long (in seconds) to wait for the target window to appear before failing. Default: 10. Useful when the app is still loading.
                   </p>
                 </div>
               </>

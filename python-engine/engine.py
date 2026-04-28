@@ -81,6 +81,7 @@ class WindAutomateXEngine:
             "excel_form_submit_loop": self._excel_form_submit_loop,
             "detect_image": self._detect_image,
             "run_task": self._run_task,
+            "switch_window": self._switch_window,
         }
 
         handler = handlers.get(step_type)
@@ -537,3 +538,85 @@ class WindAutomateXEngine:
             "success": True,
             "message": f"Linked task {task_id_str} completed successfully ({total} steps)",
         }
+
+    def _switch_window(self, config: dict) -> dict:
+        """
+        Bring a running application window to the foreground.
+
+        Config keys:
+          window_title (str) – full or partial title of the target window (case-insensitive).
+          timeout      (int) – seconds to wait for the window to appear (default 10).
+
+        The step polls for the window until timeout, then fails if it is never found.
+        It first tries pywinauto (Desktop UIA backend), then falls back to the
+        Windows ctypes API so it works even when pywinauto is not available.
+        """
+        window_title = config.get("window_title", "").strip()
+        timeout = int(config.get("timeout", 10))
+
+        if not window_title:
+            return {"success": False, "message": "switch_window: window_title is required"}
+
+        deadline = time.time() + timeout
+
+        # --- Attempt 1: pywinauto Desktop ---
+        if self.pywinauto_available:
+            from pywinauto import Desktop
+            while time.time() < deadline:
+                try:
+                    windows = Desktop(backend="uia").windows(title_re=f".*{window_title}.*")
+                    if windows:
+                        windows[0].set_focus()
+                        WaitUtils.wait_seconds(_WINDOW_SETTLE_DELAY_SECONDS)
+                        return {"success": True, "message": f"Switched to window: {window_title}"}
+                except Exception:
+                    pass
+                time.sleep(0.5)
+            return {
+                "success": False,
+                "message": f"switch_window: window '{window_title}' not found within {timeout}s",
+            }
+
+        # --- Attempt 2: ctypes / Win32 fallback ---
+        try:
+            import ctypes
+            import ctypes.wintypes
+
+            EnumWindowsProc = ctypes.WINFUNCTYPE(
+                ctypes.wintypes.BOOL,
+                ctypes.wintypes.HWND,
+                ctypes.wintypes.LPARAM,
+            )
+
+            while time.time() < deadline:
+                found_hwnd: list = []
+
+                def _enum_cb(hwnd, _lParam):
+                    if ctypes.windll.user32.IsWindowVisible(hwnd):
+                        length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
+                        if length > 0:
+                            buf = ctypes.create_unicode_buffer(length + 1)
+                            ctypes.windll.user32.GetWindowTextW(hwnd, buf, length + 1)
+                            if window_title.lower() in buf.value.lower():
+                                found_hwnd.append(hwnd)
+                                return False  # stop enumeration
+                    return True
+
+                ctypes.windll.user32.EnumWindows(EnumWindowsProc(_enum_cb), 0)
+
+                if found_hwnd:
+                    hwnd = found_hwnd[0]
+                    SW_RESTORE = 9
+                    ctypes.windll.user32.ShowWindow(hwnd, SW_RESTORE)
+                    ctypes.windll.user32.SetForegroundWindow(hwnd)
+                    WaitUtils.wait_seconds(_WINDOW_SETTLE_DELAY_SECONDS)
+                    return {"success": True, "message": f"Switched to window: {window_title}"}
+
+                time.sleep(0.5)
+
+            return {
+                "success": False,
+                "message": f"switch_window: window '{window_title}' not found within {timeout}s",
+            }
+        except Exception as e:
+            return {"success": False, "message": f"switch_window error: {e}"}
