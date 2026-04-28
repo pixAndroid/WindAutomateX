@@ -20,6 +20,7 @@ class WindAutomateXEngine:
     def __init__(self):
         self.variables: dict = {}
         self.all_tasks: dict = {}  # task_id (str) -> list of step dicts for run_task support
+        self.active_popup_watcher = None  # PopupWatcher instance if running
         self._try_import_libraries()
 
     def _try_import_libraries(self):
@@ -82,6 +83,7 @@ class WindAutomateXEngine:
             "detect_image": self._detect_image,
             "run_task": self._run_task,
             "switch_window": self._switch_window,
+            "watch_popup": self._watch_popup,
         }
 
         handler = handlers.get(step_type)
@@ -622,3 +624,71 @@ class WindAutomateXEngine:
             }
         except Exception as e:
             return {"success": False, "message": f"switch_window error: {e}"}
+
+    def _watch_popup(self, config: dict) -> dict:
+        """
+        Start (or stop) a background popup watcher.
+
+        When ``enabled`` is True (the default) a :class:`PopupWatcher` daemon
+        thread is launched that polls for windows matching the configured
+        ``rules``.  Any previously running watcher is stopped first.
+
+        When ``enabled`` is False any running watcher is stopped and the step
+        succeeds immediately.
+
+        Config keys
+        -----------
+        enabled          (bool)  – Whether to start the watcher. Default True.
+        poll_interval_ms (int)   – Polling interval in ms. Default 300.
+        rules            (list)  – List of rule dicts:
+            title_substring (str) – Window title must contain this (required).
+            text_contains   (str) – Optional; any child control text must contain this.
+            action          (str) – "click_button" (default) or "run_task".
+            button_title    (str) – Button to click. Default "OK".
+            linked_task_id  (str) – Task ID to run when action == "run_task".
+        """
+        from popup_watcher import PopupWatcher
+
+        enabled = bool(config.get("enabled", True))
+
+        # Stop any currently running watcher
+        if self.active_popup_watcher is not None:
+            try:
+                self.active_popup_watcher.stop()
+            except Exception:
+                pass
+            self.active_popup_watcher = None
+
+        if not enabled:
+            return {"success": True, "message": "watch_popup: watcher disabled / stopped"}
+
+        poll_interval_ms = int(config.get("poll_interval_ms", 300))
+        rules = config.get("rules", [])
+        if not isinstance(rules, list):
+            rules = []
+
+        watcher = PopupWatcher(rules=rules, poll_interval_ms=poll_interval_ms, engine=self)
+        started = watcher.start()
+
+        if started:
+            self.active_popup_watcher = watcher
+            return {
+                "success": True,
+                "message": f"watch_popup: watcher started with {len(rules)} rule(s)",
+            }
+
+        # pywinauto unavailable — degrade gracefully
+        return {
+            "success": True,
+            "message": "watch_popup: pywinauto not available — watcher skipped (non-fatal)",
+        }
+
+    def stop_popup_watcher(self):
+        """Stop the active popup watcher if one is running."""
+        if self.active_popup_watcher is not None:
+            try:
+                self.active_popup_watcher.stop()
+            except Exception:
+                pass
+            self.active_popup_watcher = None
+

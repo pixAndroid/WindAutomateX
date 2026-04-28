@@ -78,12 +78,14 @@ class TaskExecutor:
             if not result.get("success", False):
                 logger.error(f"Step {i + 1} failed: {result.get('message')}")
                 print(json.dumps({"status": "failed", "message": result.get("message", "Step failed")}), flush=True)
+                self.engine.stop_popup_watcher()
                 return {"status": "failed", "step": i + 1, "message": result.get("message", "")}
 
             self._apply_step_delay(step)
 
         logger.info(f"Task {task_id} completed successfully")
         print(json.dumps({"status": "completed", "task_id": task_id, "steps_run": total}), flush=True)
+        self.engine.stop_popup_watcher()
         return {"status": "completed"}
 
     # ------------------------------------------------------------------
@@ -184,6 +186,7 @@ class TaskExecutor:
                     json.dumps({"status": "failed", "message": result.get("message", "Step failed")}),
                     flush=True,
                 )
+                self.engine.stop_popup_watcher()
                 return {"status": "failed", "step": step_idx + 1, "message": result.get("message", "")}
 
             self._apply_step_delay(step)
@@ -232,6 +235,7 @@ class TaskExecutor:
                         json.dumps({"status": "failed", "message": result.get("message", "Row failed")}),
                         flush=True,
                     )
+                    self.engine.stop_popup_watcher()
                     return {
                         "status": "failed",
                         "row": row_idx + 1,
@@ -280,6 +284,7 @@ class TaskExecutor:
                     json.dumps({"status": "failed", "message": result.get("message", "Step failed")}),
                     flush=True,
                 )
+                self.engine.stop_popup_watcher()
                 return {"status": "failed", "step": global_step_idx + 1, "message": result.get("message", "")}
 
             self._apply_step_delay(step)
@@ -298,6 +303,7 @@ class TaskExecutor:
             }),
             flush=True,
         )
+        self.engine.stop_popup_watcher()
         return {"status": "completed"}
 
     # ------------------------------------------------------------------

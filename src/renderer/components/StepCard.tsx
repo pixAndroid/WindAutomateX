@@ -25,6 +25,7 @@ const stepIcons: Record<StepType, string> = {
   detect_image: '🔍',
   run_task: '▶️',
   switch_window: '🔄',
+  watch_popup: '👁',
 };
 
 const stepLabels: Record<StepType, string> = {
@@ -51,6 +52,7 @@ const stepLabels: Record<StepType, string> = {
   detect_image: 'Detect Image (Window)',
   run_task: 'Run Linked Task',
   switch_window: 'Switch Window',
+  watch_popup: 'Watch Popup (Realtime)',
 };
 
 interface StepCardProps {
@@ -79,6 +81,12 @@ const StepCard: React.FC<StepCardProps> = ({ step, index, total, isDragging, isD
       const mappingCount = Array.isArray(config.mappings) ? config.mappings.length : 0;
       const rowRange = `Rows: ${config.startRow ?? 2} to ${config.endRow ?? 'End'}`;
       configSummary = `File: ${fileName} · Mappings: ${mappingCount} fields · ${rowRange}`;
+    } else if (step.step_type === 'watch_popup') {
+      const ruleCount = Array.isArray(config.rules) ? config.rules.length : 0;
+      const enabled = config.enabled !== false;
+      configSummary = enabled
+        ? `${ruleCount} rule${ruleCount !== 1 ? 's' : ''} · ${config.poll_interval_ms ?? 300} ms interval`
+        : 'Disabled';
     } else {
       const entries = Object.entries(config).slice(0, 2);
       configSummary = entries.map(([k, v]) => `${k}: ${String(v)}`).join(', ');
