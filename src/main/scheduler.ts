@@ -7,6 +7,7 @@ import type { Task, TaskStep } from '../shared/types';
 
 const scheduledTasks = new Map<number, cron.ScheduledTask>();
 const runningScheduledProcesses = new Map<number, { proc: ChildProcess; runId: number }>();
+const stoppedTaskIds = new Set<number>();
 let mainWindowRef: BrowserWindow | null = null;
 let pythonPathRef = '';
 let runningCount = 0;
@@ -157,16 +158,23 @@ export function unscheduleTask(taskId: number): void {
 }
 
 export function stopScheduledTask(taskId: number): void {
+  // Stop the cron schedule so the task doesn't re-fire on the next tick
+  unscheduleTask(taskId);
+
   const entry = runningScheduledProcesses.get(taskId);
   if (entry) {
+    // Mark as intentionally stopped so the 'close' handler skips retry/status overwrite
+    stoppedTaskIds.add(taskId);
+    runningScheduledProcesses.delete(taskId);
+    runningCount = Math.max(0, runningCount - 1);
+    // Persist stopped status before killing so the DB is consistent even if the
+    // process exits synchronously before the next event-loop tick.
+    updateRun(entry.runId, { status: 'stopped', ended_at: new Date().toISOString() });
     try {
       entry.proc.kill('SIGTERM');
     } catch {
       // Process may have already exited
     }
-    updateRun(entry.runId, { status: 'stopped', ended_at: new Date().toISOString() });
-    runningScheduledProcesses.delete(taskId);
-    runningCount = Math.max(0, runningCount - 1);
     if (mainWindowRef) {
       mainWindowRef.webContents.send('run:update', { id: entry.runId, task_id: taskId, status: 'stopped' });
     }
@@ -235,6 +243,11 @@ async function runTask(taskId: number, retryCount = 0): Promise<void> {
   });
 
   proc.on('close', (code: number) => {
+    // If stopScheduledTask already handled this process, skip further processing
+    if (stoppedTaskIds.has(taskId)) {
+      stoppedTaskIds.delete(taskId);
+      return;
+    }
     runningCount--;
     runningScheduledProcesses.delete(taskId);
     const status = code === 0 ? 'completed' : 'failed';
