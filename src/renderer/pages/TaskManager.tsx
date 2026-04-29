@@ -46,9 +46,22 @@ const TaskManager: React.FC = () => {
     return matchSearch && matchFilter;
   });
 
-  const handleRun = async (id: number) => {
+  const handleRun = async (task: Task) => {
+    // Scheduled tasks (anything other than 'once') should not execute immediately
+    // when the Play button is clicked. Instead, enable them so they run at their
+    // next scheduled time.
+    if (task.schedule_type !== 'once') {
+      if (!task.enabled) {
+        await window.electronAPI.tasks.update(task.id, { enabled: true });
+        showToast('Task activated - will run at its next scheduled time', 'info');
+        load();
+      } else {
+        showToast('Task is already active and will run at its next scheduled time', 'info');
+      }
+      return;
+    }
     try {
-      await window.electronAPI.task.run(id);
+      await window.electronAPI.task.run(task.id);
       showToast('Task started', 'success');
     } catch {
       showToast('Failed to start task', 'error');
@@ -161,7 +174,7 @@ const TaskManager: React.FC = () => {
                     {runningTasks.has(task.id) ? (
                       <button onClick={() => handleStop(runningTasks.get(task.id)!)} title="Stop" className="text-red-500 hover:text-red-400 text-lg">⏹</button>
                     ) : (
-                      <button onClick={() => handleRun(task.id)} title="Run" className="text-green-400 hover:text-green-300 text-lg">▶</button>
+                      <button onClick={() => handleRun(task)} title="Run" className="text-green-400 hover:text-green-300 text-lg">▶</button>
                     )}
                     <button onClick={() => navigate(`/tasks/${task.id}/edit`)} title="Edit" className="text-blue-400 hover:text-blue-300">✏️</button>
                     <button onClick={() => handleDuplicate(task)} title="Duplicate" className="text-yellow-400 hover:text-yellow-300">📋</button>
