@@ -22,6 +22,9 @@ export function initDatabase(userDataPath: string): void {
     createTables();
   }
 
+  // Mark any runs that were still 'running' when the app last closed as 'stopped'
+  db.prepare("UPDATE runs SET status = 'stopped', ended_at = datetime('now') WHERE status = 'running'").run();
+
   // Insert default settings if not present
   const existingSettings = db.prepare('SELECT * FROM settings WHERE id = 1').get();
   if (!existingSettings) {

@@ -178,6 +178,11 @@ export function stopScheduledTask(taskId: number): void {
     if (mainWindowRef) {
       mainWindowRef.webContents.send('run:update', { id: entry.runId, task_id: taskId, status: 'stopped' });
     }
+  } else {
+    // No active process found — still notify the UI so it clears the stale running state
+    if (mainWindowRef) {
+      mainWindowRef.webContents.send('run:update', { id: -1, task_id: taskId, status: 'stopped' });
+    }
   }
 }
 
