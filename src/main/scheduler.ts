@@ -167,12 +167,14 @@ export function stopScheduledTask(taskId: number): void {
     stoppedTaskIds.add(taskId);
     runningScheduledProcesses.delete(taskId);
     runningCount = Math.max(0, runningCount - 1);
+    // Persist stopped status before killing so the DB is consistent even if the
+    // process exits synchronously before the next event-loop tick.
+    updateRun(entry.runId, { status: 'stopped', ended_at: new Date().toISOString() });
     try {
       entry.proc.kill('SIGTERM');
     } catch {
       // Process may have already exited
     }
-    updateRun(entry.runId, { status: 'stopped', ended_at: new Date().toISOString() });
     if (mainWindowRef) {
       mainWindowRef.webContents.send('run:update', { id: entry.runId, task_id: taskId, status: 'stopped' });
     }
