@@ -218,6 +218,8 @@ def _images_nearly_equal(img_a: np.ndarray, img_b: np.ndarray, threshold: float 
     gray_b = cv2.cvtColor(img_b, cv2.COLOR_RGB2GRAY) if img_b.ndim == 3 else img_b
     diff = cv2.absdiff(gray_a, gray_b)
     non_zero_ratio = np.count_nonzero(diff) / max(diff.size, 1)
+    # non_zero_ratio is the *fraction of different pixels*; images are
+    # "nearly equal" when fewer than (1 - threshold) of all pixels differ.
     return non_zero_ratio < (1.0 - threshold)
 
 
@@ -332,9 +334,11 @@ def _segment_rows_contour(
     import cv2
 
     # Horizontal dilation merges text fragments within the same row.
-    # Use a fixed, moderate width rather than a fraction of image width
-    # to avoid excessive kernel sizes on wide screenshots.
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (60, 1))
+    # Derive width from the image to adapt to different screen resolutions
+    # while capping at 80px to avoid merging across column boundaries.
+    img_w = binary.shape[1]
+    dilation_w = max(30, min(80, img_w // 20))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (dilation_w, 1))
     dilated = cv2.dilate(binary, kernel, iterations=2)
 
     contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -395,8 +399,9 @@ def _detect_column_x_ranges(
         if best is None:
             return None
         col_center = best["x"] + best["w"] // 2
-        # column_padding is the total offset applied left and right of the
-        # column centre, so the returned range is (centre - padding, centre + padding)
+        # column_padding is the total offset applied both left and right of the
+        # column centre.  The 60px floor ensures narrow columns (e.g. icon-only
+        # headers) still produce a usable search band.
         column_padding = max(best["w"] * 2, 60)
         return (max(0, col_center - column_padding), col_center + column_padding)
 
@@ -647,6 +652,9 @@ def process_grid_cv(config: dict) -> dict:
     max_scroll: int = int(config.get("max_scroll", 20))
     scroll_step: int = int(config.get("scroll_step", 5))
     cb_offset: int = int(config.get("cb_offset", 40))
+    # Tunable delays (ms) to accommodate fast and slow application UIs
+    click_delay_ms: int = int(config.get("click_delay_ms", 150))
+    scroll_delay_ms: int = int(config.get("scroll_delay_ms", 350))
 
     if not excel_path:
         return _error_result("'excel_path' is required in config")
@@ -859,7 +867,7 @@ def process_grid_cv(config: dict) -> dict:
 
                     try:
                         pyautogui.click(screen_cb_x, screen_cb_y)
-                        time.sleep(0.15)  # brief pause for UI to register the click
+                        time.sleep(click_delay_ms / 1000.0)
                         checked.append(pair)
                         checkbox_positions[pair] = (screen_cb_x, screen_cb_y)
                         remaining.remove(pair)
@@ -886,7 +894,7 @@ def process_grid_cv(config: dict) -> dict:
                 if eff_scroll_x > 0 or eff_scroll_y > 0:
                     pyautogui.moveTo(eff_scroll_x, eff_scroll_y, duration=0.1)
                 pyautogui.scroll(-scroll_step, x=eff_scroll_x, y=eff_scroll_y)
-                time.sleep(0.35)  # wait for the grid to repaint
+                time.sleep(scroll_delay_ms / 1000.0)
             except Exception as exc:
                 msg = f"Scroll failed on attempt {scroll_count}: {exc}"
                 logger.error(msg)

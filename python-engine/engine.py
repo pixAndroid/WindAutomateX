@@ -842,6 +842,8 @@ class WindAutomateXEngine:
             "max_scroll":            int(config.get("maxScroll", 20)),
             "scroll_step":           int(config.get("scrollStep", 5)),
             "cb_offset":             int(config.get("cbOffset", 40)),
+            "click_delay_ms":        int(config.get("clickDelayMs", 150)),
+            "scroll_delay_ms":       int(config.get("scrollDelayMs", 350)),
             # Pass the engine reference so the module can use pywinauto for window activation
             "_engine":               self,
         }
