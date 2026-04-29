@@ -122,8 +122,8 @@ def _find_all_bboxes(
     x_range: Optional[tuple[int, int]] = None,
 ) -> list[tuple[int, int, int, int]]:
     """
-    Return **all** bounding boxes whose OCR word contains *search_text*
-    (case-insensitive sub-string match).
+    Return **all** bounding boxes whose OCR word (or word group) contains
+    *search_text* (case-insensitive sub-string match).
 
     Parameters
     ----------
@@ -140,21 +140,87 @@ def _find_all_bboxes(
     Returns
     -------
     list of (x, y, w, h) tuples relative to the captured image.
+
+    Notes
+    -----
+    Tesseract often splits hyphenated values (e.g. ``"EZ25Y-060"``) or
+    multi-word column headers (e.g. ``"DI No"``) into separate tokens.
+    This function therefore also searches groups of 2–3 consecutive tokens
+    that share the same OCR line, joining them with ``""``, ``"-"``, and
+    ``" "`` before matching.  Merged bounding boxes are computed for
+    multi-token matches.
     """
     needle = search_text.lower()
+    words = ocr_data["text"]
+    n = len(words)
+
     results: list[tuple[int, int, int, int]] = []
-    for i, word in enumerate(ocr_data["text"]):
-        if not word:
+    seen: set[tuple[int, int, int, int]] = set()
+
+    def _add(bbox: tuple[int, int, int, int]) -> None:
+        if bbox[2] > 0 and bbox[3] > 0 and bbox not in seen:
+            seen.add(bbox)
+            results.append(bbox)
+
+    def _same_line(indices: list[int]) -> bool:
+        ref = indices[0]
+        return all(
+            ocr_data["block_num"][k] == ocr_data["block_num"][ref]
+            and ocr_data["par_num"][k] == ocr_data["par_num"][ref]
+            and ocr_data["line_num"][k] == ocr_data["line_num"][ref]
+            for k in indices[1:]
+        )
+
+    def _merge_bboxes(indices: list[int]) -> Optional[tuple[int, int, int, int]]:
+        valid = [
+            k for k in indices
+            if words[k] and int(ocr_data["width"][k]) > 0 and int(ocr_data["height"][k]) > 0
+        ]
+        if not valid:
+            return None
+        lefts   = [int(ocr_data["left"][k])                                for k in valid]
+        tops    = [int(ocr_data["top"][k])                                  for k in valid]
+        bottoms = [int(ocr_data["top"][k]) + int(ocr_data["height"][k])    for k in valid]
+        rights  = [int(ocr_data["left"][k]) + int(ocr_data["width"][k])    for k in valid]
+        merged_x = min(lefts)
+        merged_y = min(tops)
+        return (merged_x, merged_y, max(rights) - merged_x, max(bottoms) - merged_y)
+
+    for i in range(n):
+        w1 = words[i]
+        if not w1:
             continue
-        if needle in word.lower():
+
+        # --- Single-word match ---
+        if needle in w1.lower():
             x = int(ocr_data["left"][i])
             y = int(ocr_data["top"][i])
             w = int(ocr_data["width"][i])
             h = int(ocr_data["height"][i])
             if w > 0 and h > 0:
-                if x_range is not None and not (x_range[0] <= x <= x_range[1]):
-                    continue
-                results.append((x, y, w, h))
+                if x_range is None or (x_range[0] <= x <= x_range[1]):
+                    _add((x, y, w, h))
+
+        # --- Multi-word match: spans of 2 and 3 consecutive tokens ---
+        # Handles hyphenated VR numbers split by OCR (e.g. "EZ25Y" + "060")
+        # and multi-word headers (e.g. "DI" + "No", "Item" + "Code").
+        for span in (2, 3):
+            end = i + span
+            if end > n:
+                break
+            indices = list(range(i, end))
+            if not _same_line(indices):
+                break  # if the pair isn't on one line, the triple won't be either
+            segment = [words[k] for k in indices if words[k]]
+            if len(segment) < 2:
+                continue
+            matched = any(needle in sep.join(segment).lower() for sep in ("", "-", " "))
+            if matched:
+                bbox = _merge_bboxes(indices)
+                if bbox:
+                    if x_range is None or (x_range[0] <= bbox[0] <= x_range[1]):
+                        _add(bbox)
+
     return results
 
 
