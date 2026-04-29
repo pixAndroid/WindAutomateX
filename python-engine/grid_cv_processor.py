@@ -67,7 +67,6 @@ cb_offset           (int)   Horizontal pixels to the *left* of the start
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import time
 from typing import Optional
@@ -181,9 +180,14 @@ def _capture_roi(roi: Optional[_Roi], pyautogui) -> np.ndarray:
     return np.array(img)
 
 
-def _row_hash(row_img: np.ndarray) -> str:
-    """Return a quick MD5 hex-digest of a row image for deduplication."""
-    return hashlib.md5(row_img.tobytes()).hexdigest()  # noqa: S324
+def _row_hash(row_img: np.ndarray) -> int:
+    """
+    Return a fast non-cryptographic hash of a row image for deduplication.
+
+    Uses Python's built-in ``hash()`` on the raw bytes — sufficient for
+    detecting whether the grid has scrolled between two captures.
+    """
+    return hash(row_img.tobytes())
 
 
 def _images_nearly_equal(img_a: np.ndarray, img_b: np.ndarray, threshold: float = 0.995) -> bool:
@@ -329,9 +333,10 @@ def _segment_rows_contour(
     merged: list[tuple[int, int]] = []
     for span in spans:
         if merged and span[0] <= merged[-1][1]:
-            merged[-1] = (merged[-1][0], max(merged[-1][1], span[1]))
+            last = merged[-1]
+            merged[-1] = (last[0], max(last[1], span[1]))
         else:
-            merged.append(list(span))  # type: ignore[arg-type]
+            merged.append(span)
 
     logger.debug("_segment_rows_contour: found %d row(s)", len(merged))
     return [(s[0], s[1]) for s in merged]
@@ -686,7 +691,7 @@ def process_grid_cv(config: dict) -> dict:
     columns_detected = False
 
     # Deduplication: hash of the bottom row from the previous screenshot
-    prev_bottom_hash: Optional[str] = None
+    prev_bottom_hash: Optional[int] = None
     prev_screenshot: Optional[np.ndarray] = None
 
     # ------------------------------------------------------------------
@@ -857,7 +862,7 @@ def process_grid_cv(config: dict) -> dict:
             try:
                 if eff_scroll_x > 0 or eff_scroll_y > 0:
                     pyautogui.moveTo(eff_scroll_x, eff_scroll_y, duration=0.1)
-                pyautogui.click(eff_scroll_x, eff_scroll_y, clicks=scroll_step)
+                pyautogui.scroll(-scroll_step, x=eff_scroll_x, y=eff_scroll_y)
                 time.sleep(0.35)  # wait for the grid to repaint
             except Exception as exc:
                 msg = f"Scroll failed on attempt {scroll_count}: {exc}"
@@ -870,7 +875,8 @@ def process_grid_cv(config: dict) -> dict:
     # ------------------------------------------------------------------
     not_found: list[_Pair] = list(remaining)
 
-    success = bool(checked) and not errors
+    # Partial success (some ticked even if others had errors) is still success
+    success = bool(checked)
     parts: list[str] = [f"Checked: {checked}"]
     if not_found:
         parts.append(f"Not found: {not_found}")
