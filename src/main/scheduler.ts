@@ -103,11 +103,14 @@ export function scheduleTask(task: Task, triggerNow = false): void {
       }
       break;
     case 'minutely':
-      // schedule_value = interval in minutes (1-59), e.g. "5" runs every 5 minutes
+      // schedule_value = interval in minutes (1-60), e.g. "5" runs every 5 minutes
       if (task.schedule_value) {
         const intervalMin = parseInt(task.schedule_value, 10);
-        if (!isNaN(intervalMin) && intervalMin > 0 && intervalMin <= 60) {
+        if (!isNaN(intervalMin) && intervalMin > 0 && intervalMin < 60) {
           cronExpression = `*/${intervalMin} * * * *`;
+        } else if (!isNaN(intervalMin) && intervalMin >= 60) {
+          // 60 minutes == once per hour at minute 0
+          cronExpression = `0 * * * *`;
         } else {
           cronExpression = `* * * * *`;
         }
@@ -236,7 +239,13 @@ async function runTask(taskId: number, retryCount = 0): Promise<void> {
     logBuffer += data.toString();
   });
 
+  // Guard against both 'error' and 'close' events firing for a single spawn failure,
+  // which would otherwise decrement runningCount twice.
+  let processCleanedUp = false;
+
   proc.on('error', (err: Error) => {
+    if (processCleanedUp) return;
+    processCleanedUp = true;
     runningCount--;
     runningScheduledProcesses.delete(taskId);
     const errMsg = `Failed to start Python process: ${err.message}\n`;
@@ -258,6 +267,10 @@ async function runTask(taskId: number, retryCount = 0): Promise<void> {
       stoppedTaskIds.delete(taskId);
       return;
     }
+    // If the error handler already cleaned up (e.g. spawn failure), skip to avoid
+    // double-decrementing runningCount and double-updating the run record.
+    if (processCleanedUp) return;
+    processCleanedUp = true;
     runningCount--;
     runningScheduledProcesses.delete(taskId);
     const status = code === 0 ? 'completed' : 'failed';

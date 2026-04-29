@@ -57,6 +57,9 @@ const api: ElectronAPI = {
   onLogUpdate: (callback) => {
     ipcRenderer.on('log:update', callback);
   },
+  offLogUpdate: (callback) => {
+    ipcRenderer.removeListener('log:update', callback);
+  },
   dialog: {
     openFile: () => ipcRenderer.invoke('dialog:openFile'),
     openExcelFile: () => ipcRenderer.invoke('dialog:openExcelFile'),
