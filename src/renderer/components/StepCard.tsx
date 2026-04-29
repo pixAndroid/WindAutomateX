@@ -61,6 +61,12 @@ const stepLabels: Record<StepType, string> = {
   watch_popup: 'Watch Popup (Realtime)',
 };
 
+const clickTypeBadgeMap: Record<string, { label: string; className: string }> = {
+  left:   { label: 'Left Click',   className: 'bg-blue-500/20 text-blue-300 border border-blue-500/40' },
+  right:  { label: 'Right Click',  className: 'bg-orange-500/20 text-orange-300 border border-orange-500/40' },
+  double: { label: 'Double Click', className: 'bg-purple-500/20 text-purple-300 border border-purple-500/40' },
+};
+
 interface StepCardProps {
   step: TaskStep;
   index: number;
@@ -80,9 +86,14 @@ interface StepCardProps {
 
 const StepCard: React.FC<StepCardProps> = ({ step, index, total, isDragging, isDragOver, onEdit, onDelete, onCopy, onMoveUp, onMoveDown, onDragStart, onDragOver, onDrop, onDragEnd }) => {
   let configSummary = '';
+  let clickTypeBadge: { label: string; className: string } | null = null;
   try {
     const config = JSON.parse(step.config_json);
-    if (step.step_type === 'excel_form_submit_loop') {
+    if (step.step_type === 'master_click_coordinate') {
+      const clickType = String(config.click_type ?? 'left');
+      clickTypeBadge = clickTypeBadgeMap[clickType] ?? { label: clickType, className: 'bg-gray-500/20 text-gray-300 border border-gray-500/40' };
+      configSummary = `x: ${config.x ?? 0}, y: ${config.y ?? 0}`;
+    } else if (step.step_type === 'excel_form_submit_loop') {
       const fileName = config.filePath ? config.filePath.split(/[\\/]/).pop() : 'No file';
       const mappingCount = Array.isArray(config.mappings) ? config.mappings.length : 0;
       const rowRange = `Rows: ${config.startRow ?? 2} to ${config.endRow ?? 'End'}`;
@@ -146,7 +157,14 @@ const StepCard: React.FC<StepCardProps> = ({ step, index, total, isDragging, isD
       <span className="text-gray-400 text-sm w-6 text-center flex-shrink-0">{index + 1}</span>
       <span className="text-lg">{stepIcons[step.step_type]}</span>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-white">{stepLabels[step.step_type]}</p>
+        <p className="text-sm font-medium text-white flex items-center gap-2">
+          {stepLabels[step.step_type]}
+          {clickTypeBadge && (
+            <span className={`text-xs px-1.5 py-0.5 rounded ${clickTypeBadge.className}`}>
+              {clickTypeBadge.label}
+            </span>
+          )}
+        </p>
         {configSummary && (
           <p className="text-xs text-gray-400 truncate">{configSummary}</p>
         )}
