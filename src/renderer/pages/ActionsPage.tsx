@@ -1,7 +1,69 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import type { Task, TaskStep } from '../../shared/types';
+import type { Task, TaskStep, StepType } from '../../shared/types';
 import StepCard from '../components/StepCard';
 import { useToast } from '../components/Toast';
+
+const ALL_STEP_TYPES: StepType[] = [
+  'launch_exe', 'wait_window', 'click_element', 'click_coordinate',
+  'type_text', 'press_key', 'keyboard_shortcut', 'select_dropdown', 'upload_file',
+  'download_file', 'wait_download', 'wait_upload', 'read_text',
+  'if_condition', 'loop', 'delay', 'screenshot', 'close_app', 'kill_process',
+  'excel_form_submit_loop', 'detect_image', 'run_task', 'switch_window', 'watch_popup',
+];
+
+const STEP_ICONS: Record<StepType, string> = {
+  launch_exe: '🚀',
+  wait_window: '🪟',
+  click_element: '🖱️',
+  click_coordinate: '📍',
+  type_text: '⌨️',
+  press_key: '🔑',
+  keyboard_shortcut: '⌨️',
+  select_dropdown: '📋',
+  upload_file: '📤',
+  download_file: '📥',
+  wait_download: '⏳',
+  wait_upload: '⏫',
+  read_text: '📖',
+  if_condition: '🔀',
+  loop: '🔁',
+  delay: '⏱️',
+  screenshot: '📸',
+  close_app: '❌',
+  kill_process: '💀',
+  excel_form_submit_loop: '📊',
+  detect_image: '🔍',
+  run_task: '▶️',
+  switch_window: '🔄',
+  watch_popup: '👁',
+};
+
+const STEP_LABELS: Record<StepType, string> = {
+  launch_exe: 'Launch EXE',
+  wait_window: 'Wait Window',
+  click_element: 'Click Element',
+  click_coordinate: 'Click Coordinate',
+  type_text: 'Type Text',
+  press_key: 'Press Key',
+  keyboard_shortcut: 'Keyboard Shortcut',
+  select_dropdown: 'Select Dropdown',
+  upload_file: 'Upload File',
+  download_file: 'Download File',
+  wait_download: 'Wait Download',
+  wait_upload: 'Wait Upload',
+  read_text: 'Read Text',
+  if_condition: 'If Condition',
+  loop: 'Loop',
+  delay: 'Delay',
+  screenshot: 'Screenshot',
+  close_app: 'Close App',
+  kill_process: 'Kill Process',
+  excel_form_submit_loop: 'Excel Form Submit Loop',
+  detect_image: 'Detect Image',
+  run_task: 'Run Linked Task',
+  switch_window: 'Switch Window',
+  watch_popup: 'Watch Popup',
+};
 
 const ActionsPage: React.FC = () => {
   const { showToast } = useToast();
@@ -124,47 +186,69 @@ const ActionsPage: React.FC = () => {
         )}
       </div>
 
-      {/* Steps list */}
-      <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
-        {loading && (
-          <div className="text-center text-gray-500 py-12">Loading steps…</div>
-        )}
-        {!loading && steps.length === 0 && selectedTaskId !== null && (
-          <div className="text-center text-gray-500 py-12">
-            <p>No steps found for this task.</p>
+      {/* Main content: steps list + default actions panel */}
+      <div className="flex gap-6 flex-1 min-h-0">
+        {/* Steps list */}
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+            {loading && (
+              <div className="text-center text-gray-500 py-12">Loading steps…</div>
+            )}
+            {!loading && steps.length === 0 && selectedTaskId !== null && (
+              <div className="text-center text-gray-500 py-12">
+                <p>No steps found for this task.</p>
+              </div>
+            )}
+            {!loading && tasks.length === 0 && (
+              <div className="text-center text-gray-500 py-12">
+                <p>No tasks found. Create a task in Task Manager first.</p>
+              </div>
+            )}
+            {!loading && steps.map((step, i) => (
+              <StepCard
+                key={step.id > 0 ? `step-${step.id}` : `step-order-${step.step_order}-${step.step_type}`}
+                step={step}
+                index={i}
+                total={steps.length}
+                isDragging={dragIndex === i}
+                isDragOver={dragOverIndex === i && dragIndex !== i}
+                onEdit={() => {/* editing handled in Task Builder */}}
+                onDelete={() => {/* deletion handled in Task Builder */}}
+                onCopy={() => {/* copying handled in Task Builder */}}
+                onMoveUp={() => handleMoveUp(i)}
+                onMoveDown={() => handleMoveDown(i)}
+                onDragStart={() => handleDragStart(i)}
+                onDragOver={(e) => handleDragOver(e, i)}
+                onDrop={() => handleDrop(i)}
+                onDragEnd={handleDragEnd}
+              />
+            ))}
           </div>
-        )}
-        {!loading && tasks.length === 0 && (
-          <div className="text-center text-gray-500 py-12">
-            <p>No tasks found. Create a task in Task Manager first.</p>
-          </div>
-        )}
-        {!loading && steps.map((step, i) => (
-          <StepCard
-            key={step.id > 0 ? `step-${step.id}` : `step-order-${step.step_order}-${step.step_type}`}
-            step={step}
-            index={i}
-            total={steps.length}
-            isDragging={dragIndex === i}
-            isDragOver={dragOverIndex === i && dragIndex !== i}
-            onEdit={() => {/* editing handled in Task Builder */}}
-            onDelete={() => {/* deletion handled in Task Builder */}}
-            onCopy={() => {/* copying handled in Task Builder */}}
-            onMoveUp={() => handleMoveUp(i)}
-            onMoveDown={() => handleMoveDown(i)}
-            onDragStart={() => handleDragStart(i)}
-            onDragOver={(e) => handleDragOver(e, i)}
-            onDrop={() => handleDrop(i)}
-            onDragEnd={handleDragEnd}
-          />
-        ))}
-      </div>
+          {!loading && steps.length > 1 && (
+            <p className="text-xs text-gray-500 mt-2">
+              Drag steps or use ↑ ↓ buttons to reorder, then click <strong>Save Order</strong>.
+            </p>
+          )}
+        </div>
 
-      {!loading && steps.length > 1 && (
-        <p className="text-xs text-gray-500">
-          Drag steps or use ↑ ↓ buttons to reorder, then click <strong>Save Order</strong>.
-        </p>
-      )}
+        {/* Default actions/steps list panel */}
+        <div className="w-56 flex-shrink-0 flex flex-col">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            Available Actions
+          </h3>
+          <div className="flex-1 overflow-y-auto bg-gray-800 border border-gray-700 rounded-lg py-1">
+            {ALL_STEP_TYPES.map((type) => (
+              <div
+                key={type}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-700 cursor-default"
+              >
+                <span className="text-base leading-none">{STEP_ICONS[type]}</span>
+                <span>{STEP_LABELS[type]}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
