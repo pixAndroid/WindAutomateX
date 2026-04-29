@@ -140,8 +140,6 @@ export function scheduleTask(task: Task, triggerNow = false): void {
       scheduledTasks.set(task.id, scheduled);
       notifyScheduleChanged();
 
-      // Run the task immediately on the first enable/re-schedule so the user
-      // doesn't have to wait for the first cron tick after toggling the task on.
       if (triggerNow) {
         runTask(task.id);
       }
