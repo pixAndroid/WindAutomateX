@@ -11,17 +11,30 @@ When an optional *item_code* is supplied, the row is only ticked when
 (matching y-centre within a small tolerance).  This prevents accidentally
 ticking a duplicate VR number that belongs to a different item.
 
+Column-aware matching
+---------------------
+When *vr_col_header* and/or *item_code_col_header* are provided the
+module first detects those column headers on-screen via OCR and then
+restricts each search to the x-range of the appropriate column.  This
+gives row-by-row, column-by-column precision: a VR number found in the
+wrong column (e.g. a description that happens to contain the number) is
+no longer a false positive.
+
 Public API
 ----------
 tick_checkboxes_by_vr(vr_list_str, *, window_title, grid_roi,
                       scroll_x, scroll_y, max_scroll_attempts,
-                      scroll_step, checkbox_offset, item_code, engine) -> dict
+                      scroll_step, checkbox_offset,
+                      item_code, vr_col_header, item_code_col_header,
+                      engine) -> dict
     Main entry-point.  Returns a result dict with keys:
-        success      – True when at least one VR was checked without error
-        checked      – list of VR numbers successfully ticked
-        not_found    – list of VR numbers not found after full scroll
-        errors       – list of per-VR error strings
-        message      – human-readable summary
+        success            – True when at least one VR was checked without error
+        checked            – list of VR numbers successfully ticked
+        not_found          – list of VR numbers not found after full scroll
+        errors             – list of per-VR error strings
+        message            – human-readable summary
+        checkbox_positions – {vr_number: (screen_x, screen_y)} for ticked rows
+        checkbox_distance  – configured pixel distance from VR text to checkbox
 """
 
 import logging
@@ -103,12 +116,30 @@ def _ocr_get_data(image):
     return pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT)
 
 
-def _find_all_bboxes(ocr_data: dict, search_text: str) -> list[tuple[int, int, int, int]]:
+def _find_all_bboxes(
+    ocr_data: dict,
+    search_text: str,
+    x_range: Optional[tuple[int, int]] = None,
+) -> list[tuple[int, int, int, int]]:
     """
     Return **all** bounding boxes whose OCR word contains *search_text*
     (case-insensitive sub-string match).
 
-    Each entry is an ``(x, y, w, h)`` tuple relative to the captured image.
+    Parameters
+    ----------
+    ocr_data : dict
+        Raw dict returned by :func:`_ocr_get_data`.
+    search_text : str
+        Text to search for (case-insensitive sub-string).
+    x_range : (x_min, x_max) | None
+        When provided, only bounding boxes whose left edge falls within
+        ``[x_min, x_max]`` are returned.  Pass the result of
+        :func:`_get_column_x_range` to restrict the search to a single
+        grid column and avoid false positives in other columns.
+
+    Returns
+    -------
+    list of (x, y, w, h) tuples relative to the captured image.
     """
     needle = search_text.lower()
     results: list[tuple[int, int, int, int]] = []
@@ -121,11 +152,66 @@ def _find_all_bboxes(ocr_data: dict, search_text: str) -> list[tuple[int, int, i
             w = int(ocr_data["width"][i])
             h = int(ocr_data["height"][i])
             if w > 0 and h > 0:
+                if x_range is not None and not (x_range[0] <= x <= x_range[1]):
+                    continue
                 results.append((x, y, w, h))
     return results
 
 
-def _ocr_find_text(image, search_text: str) -> Optional[tuple]:
+def _get_column_x_range(
+    ocr_data: dict,
+    header_text: str,
+    col_width_factor: float = 1.5,
+    min_half_width: int = 40,
+) -> Optional[tuple[int, int]]:
+    """
+    Detect the horizontal extent of a grid column by locating its header.
+
+    The function finds the first OCR match for *header_text* and returns an
+    ``(x_min, x_max)`` range centred on the header bounding box.  The range
+    is wide enough to capture full cell values even when the column is narrow.
+
+    Parameters
+    ----------
+    ocr_data : dict
+        Raw OCR data for the current screenshot.
+    header_text : str
+        Column header as it appears on screen (e.g. ``"DI No"`` or
+        ``"Item Code"``).  A sub-string match is used so abbreviated or
+        partially recognised headers are still found.
+    col_width_factor : float
+        Multiplier applied to the detected header width to derive the column
+        half-width.  Values > 1 give a generous band that accounts for cells
+        whose text is wider than the header.
+    min_half_width : int
+        Floor value for the column half-width in pixels.  Prevents an
+        excessively narrow band when the header is very short.
+
+    Returns
+    -------
+    (x_min, x_max) or None when the header is not found in *ocr_data*.
+    """
+    bboxes = _find_all_bboxes(ocr_data, header_text)
+    if not bboxes:
+        logger.debug("_get_column_x_range: header '%s' not found in OCR data", header_text)
+        return None
+    hx, _hy, hw, _hh = bboxes[0]
+    col_center = hx + hw // 2
+    half_width = int(max(hw * col_width_factor, min_half_width))
+    x_min = max(0, col_center - half_width)
+    x_max = col_center + half_width
+    logger.debug(
+        "_get_column_x_range: header '%s' → center=%d half_width=%d range=[%d, %d]",
+        header_text, col_center, half_width, x_min, x_max,
+    )
+    return (x_min, x_max)
+
+
+def _ocr_find_text(
+    image,
+    search_text: str,
+    col_header: str = "",
+) -> Optional[tuple]:
     """
     Use pytesseract to locate the **first** occurrence of *search_text* in
     *image*.
@@ -133,25 +219,78 @@ def _ocr_find_text(image, search_text: str) -> Optional[tuple]:
     Returns an (x, y, w, h) bounding box **relative to image**, or None.
     The search is case-insensitive and also matches when *search_text* is a
     sub-string of a recognised word (handles slight OCR mis-reads).
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Screenshot to search.
+    search_text : str
+        Text to find.
+    col_header : str
+        When non-empty, the search is restricted to the x-range of the column
+        whose on-screen header matches this string.  Pass the value of
+        ``vrColumn`` (e.g. ``"DI No"``) to avoid picking up the same number
+        appearing in a different grid column.
     """
     data = _ocr_get_data(image)
-    bboxes = _find_all_bboxes(data, search_text)
+    x_range: Optional[tuple[int, int]] = None
+    if col_header:
+        x_range = _get_column_x_range(data, col_header)
+        if x_range is None:
+            logger.debug(
+                "_ocr_find_text: column header '%s' not detected — searching full width",
+                col_header,
+            )
+    bboxes = _find_all_bboxes(data, search_text, x_range=x_range)
     return bboxes[0] if bboxes else None
 
 
 def _ocr_find_text_with_item_code(
-    image, vr_text: str, item_code: str, row_tolerance: int = 12
+    image,
+    vr_text: str,
+    item_code: str,
+    row_tolerance: int = 12,
+    vr_col_header: str = "",
+    item_code_col_header: str = "",
 ) -> Optional[tuple]:
     """
     Locate *vr_text* in *image* **only when** *item_code* also appears on
     the same grid row (y-centres within *row_tolerance* pixels).
 
+    Column-aware matching
+    ~~~~~~~~~~~~~~~~~~~~~
+    When *vr_col_header* is provided the search for *vr_text* is restricted
+    to the x-range of the column whose header matches that string.  Likewise
+    *item_code_col_header* restricts the Item Code search to its own column.
+    This ensures row-by-row, column-by-column precision: a value that appears
+    in a different column on the same row is not treated as a match.
+
     Returns the VR text bounding box ``(x, y, w, h)`` if a matching pair is
     found, otherwise ``None``.
     """
     data = _ocr_get_data(image)
-    vr_bboxes = _find_all_bboxes(data, vr_text)
-    code_bboxes = _find_all_bboxes(data, item_code)
+
+    # Resolve column x-ranges from on-screen column headers
+    vr_x_range: Optional[tuple[int, int]] = None
+    if vr_col_header:
+        vr_x_range = _get_column_x_range(data, vr_col_header)
+        if vr_x_range is None:
+            logger.debug(
+                "_ocr_find_text_with_item_code: VR column header '%s' not detected — searching full width",
+                vr_col_header,
+            )
+
+    code_x_range: Optional[tuple[int, int]] = None
+    if item_code_col_header:
+        code_x_range = _get_column_x_range(data, item_code_col_header)
+        if code_x_range is None:
+            logger.debug(
+                "_ocr_find_text_with_item_code: Item Code column header '%s' not detected — searching full width",
+                item_code_col_header,
+            )
+
+    vr_bboxes = _find_all_bboxes(data, vr_text, x_range=vr_x_range)
+    code_bboxes = _find_all_bboxes(data, item_code, x_range=code_x_range)
 
     if not vr_bboxes or not code_bboxes:
         return None
@@ -161,6 +300,11 @@ def _ocr_find_text_with_item_code(
         for code_bbox in code_bboxes:
             code_cy = code_bbox[1] + code_bbox[3] // 2
             if abs(vr_cy - code_cy) <= row_tolerance:
+                logger.debug(
+                    "_ocr_find_text_with_item_code: matched VR '%s' + item code '%s' "
+                    "at y-centres %d / %d (diff=%d px)",
+                    vr_text, item_code, vr_cy, code_cy, abs(vr_cy - code_cy),
+                )
                 return vr_bbox
     return None
 
@@ -222,6 +366,8 @@ def tick_checkboxes_by_vr(
     scroll_step: int = 3,
     checkbox_offset: int = 40,
     item_code: str = "",
+    vr_col_header: str = "",
+    item_code_col_header: str = "",
     engine=None,
 ) -> dict:
     """
@@ -246,11 +392,22 @@ def tick_checkboxes_by_vr(
         Mouse-wheel click count per scroll event (positive = down).
     checkbox_offset : int
         Horizontal pixels to the **left** of the detected VR text where the
-        checkbox column lives.
+        checkbox column lives.  The actual click position and distance from
+        the VR text are both logged and included in the returned dict.
     item_code : str
         When provided, a VR number is only ticked when both the VR number
         **and** this item code appear on the same grid row.  Rows where only
         the VR number matches (but the item code differs) are skipped.
+    vr_col_header : str
+        On-screen column header for the VR / DI No column (e.g. ``"DI No"``).
+        When supplied, VR number searches are restricted to the x-range of
+        that column so that the same number appearing in a different column
+        does not cause a false match.  Typically the same value as the Excel
+        ``vrColumn`` field.
+    item_code_col_header : str
+        On-screen column header for the Item Code column.  When supplied,
+        item code searches are restricted to that column's x-range.
+        Typically the same value as the Excel ``itemCodeColumn`` field.
     engine : WindAutomateXEngine | None
         Shared engine instance used for pywinauto window activation.
 
@@ -258,7 +415,9 @@ def tick_checkboxes_by_vr(
     -------
     dict
         ``{"success": bool, "checked": [...], "not_found": [...],
-           "errors": [...], "message": str}``
+           "errors": [...], "message": str,
+           "checkbox_positions": {vr: (x, y)},
+           "checkbox_distance": int}``
     """
     try:
         import pyautogui
@@ -299,6 +458,14 @@ def tick_checkboxes_by_vr(
     checked: list[str] = []
     not_found: list[str] = []
     errors: list[str] = []
+    checkbox_positions: dict[str, tuple[int, int]] = {}
+
+    if vr_col_header or item_code_col_header:
+        logger.info(
+            "tick_checkboxes_by_vr: column-aware mode — VR col header='%s', "
+            "Item Code col header='%s'",
+            vr_col_header, item_code_col_header,
+        )
 
     for vr_number in vr_numbers:
         found = False
@@ -321,12 +488,19 @@ def tick_checkboxes_by_vr(
 
             prev_screenshot = screenshot.copy()
 
-            # --- OCR search ---
+            # --- OCR search (column-aware when headers are provided) ---
             try:
                 if item_code:
-                    bbox = _ocr_find_text_with_item_code(screenshot, vr_number, item_code)
+                    bbox = _ocr_find_text_with_item_code(
+                        screenshot, vr_number, item_code,
+                        vr_col_header=vr_col_header,
+                        item_code_col_header=item_code_col_header,
+                    )
                 else:
-                    bbox = _ocr_find_text(screenshot, vr_number)
+                    bbox = _ocr_find_text(
+                        screenshot, vr_number,
+                        col_header=vr_col_header,
+                    )
             except ImportError as exc:
                 msg = f"{vr_number}: OCR unavailable — {exc}"
                 logger.error(msg)
@@ -347,22 +521,31 @@ def tick_checkboxes_by_vr(
                     rx, ry, _rw, _rh = roi
                     screen_x = rx + bx - checkbox_offset
                     screen_y = ry + by + bh // 2
+                    vr_screen_x = rx + bx + bw // 2  # centre of the VR text on screen
                 else:
                     screen_x = bx - checkbox_offset
                     screen_y = by + bh // 2
+                    vr_screen_x = bx + bw // 2
 
                 # Clamp to a sensible range to avoid accidental off-screen clicks
                 screen_x = max(0, screen_x)
                 screen_y = max(0, screen_y)
 
+                # Calculate and log the pixel distance from VR text to checkbox
+                distance_px = vr_screen_x - screen_x
+                logger.info(
+                    "%s: VR text centre at x=%d, checkbox click at (%d, %d), "
+                    "distance=%d px (offset=%d px)",
+                    vr_number, vr_screen_x, screen_x, screen_y,
+                    distance_px, checkbox_offset,
+                )
+
                 try:
                     pyautogui.click(screen_x, screen_y)
                     time.sleep(0.15)
                     checked.append(vr_number)
+                    checkbox_positions[vr_number] = (screen_x, screen_y)
                     found = True
-                    logger.info(
-                        "%s: checkbox clicked at (%d, %d)", vr_number, screen_x, screen_y
-                    )
                 except Exception as exc:
                     msg = f"{vr_number}: click failed — {exc}"
                     logger.error(msg)
@@ -400,4 +583,6 @@ def tick_checkboxes_by_vr(
         "not_found": not_found,
         "errors": errors,
         "message": message,
+        "checkbox_positions": checkbox_positions,
+        "checkbox_distance": checkbox_offset,
     }

@@ -795,6 +795,8 @@ class WindAutomateXEngine:
             scroll_step=int(config.get("scrollStep", 3)),
             checkbox_offset=int(config.get("checkboxOffset", 40)),
             item_code=item_code,
+            vr_col_header=str(config.get("vrColumn", "")).strip(),
+            item_code_col_header=str(config.get("itemCodeColumn", "")).strip(),
             engine=self,
         )
 

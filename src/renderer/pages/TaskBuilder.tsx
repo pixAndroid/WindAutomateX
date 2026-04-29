@@ -81,7 +81,7 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
     scrollY: 0,
     maxScrollAttempts: 20,
     scrollStep: 3,
-    checkboxOffset: 40,
+    checkboxOffset: 25,
     delay: 60,
   },
 };
@@ -1984,7 +1984,8 @@ const TaskBuilder: React.FC = () => {
                   <p className="text-xs text-gray-500 mt-1">
                     Name of the Excel column containing VR numbers separated by commas (e.g. <code className="text-gray-400">EZ25Y-042, EZ25Y-047</code>).
                     Used when this step runs inside an Excel Form Submit Loop.
-                    Leave blank to pass VR numbers from an engine variable named <code className="text-gray-400">vr_numbers</code>.
+                    Leave blank to pass VR numbers from an engine variable named <code className="text-gray-400">vr_numbers</code>.{' '}
+                    <strong className="text-gray-400">Also used as the on-screen grid column header</strong> so OCR matching is restricted to that column only (column-aware precision).
                   </p>
                 </div>
 
@@ -2010,7 +2011,8 @@ const TaskBuilder: React.FC = () => {
                   )}
                   <p className="text-xs text-gray-500 mt-1">
                     When set, a grid row is only ticked when <strong className="text-gray-400">both</strong> the VR number and this Item Code appear on the same row.
-                    Leave blank to match by VR number alone; the engine will also check for a variable named <code className="text-gray-400">item_code</code> if one is set.
+                    Leave blank to match by VR number alone; the engine will also check for a variable named <code className="text-gray-400">item_code</code> if one is set.{' '}
+                    <strong className="text-gray-400">Also used as the on-screen grid column header</strong> to constrain OCR matching to the Item Code column only.
                   </p>
                 </div>
 
@@ -2129,6 +2131,7 @@ const TaskBuilder: React.FC = () => {
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     How many pixels to the <strong className="text-gray-400">left</strong> of the detected VR number text to click (where the checkbox column is). Calibrate once for your grid layout.
+                    The actual pixel distance from the VR text to the checkbox click position is logged after each successful tick.
                   </p>
                 </div>
               </>
