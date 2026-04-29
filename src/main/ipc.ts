@@ -254,6 +254,7 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
 
     // Send execute command
     proc.stdin.write(JSON.stringify({ command: 'execute', task_id: taskId, steps: stepsJson, all_tasks: allTasksMap }) + '\n');
+    proc.stdin.end();
 
     let logBuffer = '';
 
