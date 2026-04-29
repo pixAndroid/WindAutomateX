@@ -145,23 +145,26 @@ const StepCard: React.FC<StepCardProps> = ({ step, index, total, isDragging, isD
           <p className="text-xs text-gray-400 truncate">{configSummary}</p>
         )}
       </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Up/Down reorder buttons — always visible */}
+      <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
         <button
           onClick={onMoveUp}
           disabled={index === 0}
-          className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+          className="p-0.5 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed leading-none"
           title="Move Up"
         >
-          ↑
+          ▲
         </button>
         <button
           onClick={onMoveDown}
           disabled={index === total - 1}
-          className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+          className="p-0.5 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed leading-none"
           title="Move Down"
         >
-          ↓
+          ▼
         </button>
+      </div>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
           onClick={onEdit}
           className="p-1 text-blue-400 hover:text-blue-300"
