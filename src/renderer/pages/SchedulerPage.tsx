@@ -204,6 +204,13 @@ const SchedulerPage: React.FC = () => {
     try {
       await window.electronAPI.scheduler.stopTask(task.id);
       showToast(`Task "${task.name}" stopped`, 'info');
+      // Optimistically clear the running state immediately so the UI updates
+      // even if the run:update IPC event is delayed or not received
+      setRunningTaskIds((prev) => {
+        const next = new Set(prev);
+        next.delete(task.id);
+        return next;
+      });
     } catch {
       showToast(`Failed to stop task "${task.name}"`, 'error');
     }
