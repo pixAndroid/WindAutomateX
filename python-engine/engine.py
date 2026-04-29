@@ -88,6 +88,7 @@ class WindAutomateXEngine:
             "switch_window": self._switch_window,
             "watch_popup": self._watch_popup,
             "tick_checkboxes_by_vr": self._tick_checkboxes_by_vr,
+            "process_grid_cv": self._process_grid_cv,
         }
 
         handler = handlers.get(step_type)
@@ -800,4 +801,50 @@ class WindAutomateXEngine:
             engine=self,
         )
 
+        return {"success": result.get("success", False), "message": result.get("message", "")}
+
+    def _process_grid_cv(self, config: dict) -> dict:
+        """
+        Computer Vision batch fallback for ticking checkboxes.
+
+        Reads all target (VR No, Item Code) pairs from an Excel file, then
+        scans the desktop grid window using OpenCV row segmentation and
+        column-targeted OCR to find and tick every matching checkbox in a
+        single scrolling pass.
+
+        Config keys
+        -----------
+        excelPath             (str)  – Path to the .xlsx / .csv file.
+        sheetName             (str)  – Sheet name; default ``"Sheet1"``.
+        startRow              (int)  – 1-based first data row; default 2.
+        vrColumnName          (str)  – Excel column header for VR Nos.
+        itemCodeColumnName    (str)  – Excel column header for Item Codes.
+        windowTitle           (str)  – Partial window title to focus.
+        gridRoi               (str)  – Screen region as ``"x,y,w,h"``.
+        scrollX               (int)  – X coordinate for scroll events.
+        scrollY               (int)  – Y coordinate for scroll events.
+        maxScroll             (int)  – Maximum scroll attempts; default 20.
+        scrollStep            (int)  – Wheel clicks per scroll; default 5.
+        cbOffset              (int)  – Pixels left of VR text to checkbox; default 40.
+        """
+        from grid_cv_processor import process_grid_cv
+
+        cv_config = {
+            "excel_path":            str(config.get("excelPath", "")).strip(),
+            "sheet_name":            str(config.get("sheetName", "Sheet1")).strip() or "Sheet1",
+            "start_row":             int(config.get("startRow", 2)),
+            "vr_column_name":        str(config.get("vrColumnName", "")).strip(),
+            "item_code_column_name": str(config.get("itemCodeColumnName", "")).strip(),
+            "window_title":          str(config.get("windowTitle", "")).strip(),
+            "grid_roi":              config.get("gridRoi"),
+            "scroll_x":              int(config.get("scrollX", 0)),
+            "scroll_y":              int(config.get("scrollY", 0)),
+            "max_scroll":            int(config.get("maxScroll", 20)),
+            "scroll_step":           int(config.get("scrollStep", 5)),
+            "cb_offset":             int(config.get("cbOffset", 40)),
+            # Pass the engine reference so the module can use pywinauto for window activation
+            "_engine":               self,
+        }
+
+        result = process_grid_cv(cv_config)
         return {"success": result.get("success", False), "message": result.get("message", "")}
