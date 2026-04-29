@@ -10,6 +10,7 @@ const ACTION_TYPE_COLORS: Record<string, { border: string; label: string }> = {
   keyboard:   { border: 'border-yellow-500', label: 'text-yellow-400' },
   type_text:  { border: 'border-green-500',  label: 'text-green-400'  },
   delay:      { border: 'border-orange-500', label: 'text-orange-400' },
+  tick_vr:    { border: 'border-teal-500',   label: 'text-teal-400'   },
 };
 
 const ALL_STEP_TYPES: StepType[] = [
@@ -19,6 +20,7 @@ const ALL_STEP_TYPES: StepType[] = [
   'download_file', 'wait_download', 'wait_upload', 'read_text',
   'if_condition', 'loop', 'delay', 'screenshot', 'close_app', 'kill_process',
   'excel_form_submit_loop', 'detect_image', 'run_task', 'switch_window', 'watch_popup',
+  'tick_checkboxes_by_vr',
 ];
 
 const defaultConfig: Record<StepType, Record<string, unknown>> = {
@@ -69,6 +71,17 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
     enabled: true,
     poll_interval_ms: 300,
     rules: [] as { title_substring: string; text_contains: string; action: string; button_title: string; linked_task_id: string; url: string; shortcut_keys: string; monitor_mode: string }[],
+    delay: 60,
+  },
+  tick_checkboxes_by_vr: {
+    vrColumn: '',
+    windowTitle: '',
+    gridRoi: '',
+    scrollX: 0,
+    scrollY: 0,
+    maxScrollAttempts: 20,
+    scrollStep: 3,
+    checkboxOffset: 40,
     delay: 60,
   },
 };
@@ -1026,6 +1039,7 @@ const TaskBuilder: React.FC = () => {
                           <option value="keyboard">Keyboard Shortcut</option>
                           <option value="type_text">Type Text (Column Value)</option>
                           <option value="delay">Delay</option>
+                          <option value="tick_vr">Tick Checkboxes by VR Nos (Excel)</option>
                         </select>
                         <span className={`text-xs flex-1 font-semibold ${ACTION_TYPE_COLORS[action.type]?.label ?? 'text-gray-500'}`}>Action {ai + 1}</span>
                         <button
@@ -1132,6 +1146,85 @@ const TaskBuilder: React.FC = () => {
                           />
                           <span className="text-xs text-gray-400">ms</span>
                         </div>
+                      ) : action.type === 'tick_vr' ? (
+                        <div className="flex flex-col gap-2">
+                          {/* VR Column */}
+                          <div className="flex gap-2 items-center">
+                            <label className="text-xs text-gray-400 w-28 shrink-0">VR Column</label>
+                            <input
+                              type="text"
+                              list={`excel-cols-vr-action-${ai}`}
+                              value={action.value}
+                              onChange={(e) => {
+                                const submitActions = [...(editingStep.config.submitActions as { type: string; value: string; [key: string]: unknown }[])];
+                                submitActions[ai] = { ...submitActions[ai], value: e.target.value };
+                                setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                              }}
+                              placeholder={excelColumns.length > 0 ? 'Pick column…' : 'Column name'}
+                              className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-teal-500"
+                            />
+                            {excelColumns.length > 0 && (
+                              <datalist id={`excel-cols-vr-action-${ai}`}>
+                                {excelColumns.map((col) => <option key={col} value={col} />)}
+                              </datalist>
+                            )}
+                          </div>
+                          {/* Window Title */}
+                          <div className="flex gap-2 items-center">
+                            <label className="text-xs text-gray-400 w-28 shrink-0">Window Title</label>
+                            <input
+                              type="text"
+                              value={String((action as { type: string; value: string; windowTitle?: string }).windowTitle ?? '')}
+                              onChange={(e) => {
+                                const submitActions = [...(editingStep.config.submitActions as { type: string; value: string; [key: string]: unknown }[])];
+                                submitActions[ai] = { ...submitActions[ai], windowTitle: e.target.value };
+                                setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                              }}
+                              placeholder="e.g. My SAP Grid (blank = active window)"
+                              className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-teal-500"
+                            />
+                          </div>
+                          {/* Grid ROI */}
+                          <div className="flex gap-2 items-center">
+                            <label className="text-xs text-gray-400 w-28 shrink-0">Grid ROI</label>
+                            <input
+                              type="text"
+                              value={String((action as { type: string; value: string; gridRoi?: string }).gridRoi ?? '')}
+                              onChange={(e) => {
+                                const submitActions = [...(editingStep.config.submitActions as { type: string; value: string; [key: string]: unknown }[])];
+                                submitActions[ai] = { ...submitActions[ai], gridRoi: e.target.value };
+                                setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                              }}
+                              placeholder="x,y,w,h (blank = full screen)"
+                              className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-teal-500"
+                            />
+                          </div>
+                          {/* Scroll & offset row */}
+                          <div className="flex gap-2 flex-wrap">
+                            {([
+                              { key: 'scrollX', label: 'Scroll X', placeholder: '0' },
+                              { key: 'scrollY', label: 'Scroll Y', placeholder: '0' },
+                              { key: 'maxScrollAttempts', label: 'Max Scroll', placeholder: '20' },
+                              { key: 'scrollStep', label: 'Scroll Step', placeholder: '3' },
+                              { key: 'checkboxOffset', label: 'CB Offset', placeholder: '40' },
+                            ] as { key: string; label: string; placeholder: string }[]).map(({ key, label, placeholder }) => (
+                              <div key={key} className="flex flex-col gap-0.5">
+                                <label className="text-xs text-gray-500">{label}</label>
+                                <input
+                                  type="number"
+                                  value={String((action as Record<string, unknown>)[key] ?? '')}
+                                  onChange={(e) => {
+                                    const submitActions = [...(editingStep.config.submitActions as { type: string; value: string; [key: string]: unknown }[])];
+                                    submitActions[ai] = { ...submitActions[ai], [key]: e.target.value === '' ? '' : Number(e.target.value) };
+                                    setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                                  }}
+                                  placeholder={placeholder}
+                                  className="w-20 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-teal-500"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       ) : (
                         <div className="flex gap-2 items-center">
                           <input
@@ -1197,7 +1290,7 @@ const TaskBuilder: React.FC = () => {
                     + Add Submit Action
                   </button>
                   <p className="text-xs text-gray-500">
-                    Add coordinate clicks, keyboard shortcuts, "Type Text (Column Value)", or "Delay" actions to execute when submitting each row.
+                    Add coordinate clicks, keyboard shortcuts, "Type Text (Column Value)", "Delay", or "Tick Checkboxes by VR Nos (Excel)" actions to execute when submitting each row.
                   </p>
                 </div>
                 <div className="flex gap-3">
@@ -1836,6 +1929,159 @@ const TaskBuilder: React.FC = () => {
                   <p className="text-xs text-gray-500">
                     Each rule watches for a dialog whose title contains the specified text. When found, the watcher
                     brings it to the foreground and performs the configured action. Runs concurrently with the task.
+                  </p>
+                </div>
+              </>
+            ) : editingStep.step.step_type === 'tick_checkboxes_by_vr' ? (
+              <>
+                <p className="text-xs text-gray-400 bg-gray-750 border border-teal-700 rounded-lg px-3 py-2">
+                  ☑️ <strong className="text-white">Tick Checkboxes by VR Nos</strong> reads a comma-separated list of VR numbers
+                  from an Excel column and ticks the matching checkbox in a desktop grid window.
+                  It automatically scrolls the grid to find VR numbers not currently visible.
+                </p>
+
+                {/* VR Column */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">VR Numbers Column (Excel)</label>
+                  <input
+                    type="text"
+                    list="excel-cols-vr"
+                    value={String(editingStep.config.vrColumn ?? '')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, vrColumn: e.target.value } } : null
+                      )
+                    }
+                    placeholder="e.g. VR_Numbers"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500"
+                  />
+                  {excelColumns.length > 0 && (
+                    <datalist id="excel-cols-vr">
+                      {excelColumns.map((col) => <option key={col} value={col} />)}
+                    </datalist>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Name of the Excel column containing VR numbers separated by commas (e.g. <code className="text-gray-400">EZ25Y-042, EZ25Y-047</code>).
+                    Used when this step runs inside an Excel Form Submit Loop.
+                    Leave blank to pass VR numbers from an engine variable named <code className="text-gray-400">vr_numbers</code>.
+                  </p>
+                </div>
+
+                {/* Target Window */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Target Window Title</label>
+                  <input
+                    type="text"
+                    value={String(editingStep.config.windowTitle ?? '')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, windowTitle: e.target.value } } : null
+                      )
+                    }
+                    placeholder="e.g. My SAP Grid"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Partial or full title of the window containing the grid. Leave blank to use the currently active window.
+                  </p>
+                </div>
+
+                {/* Grid ROI */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Grid Region (ROI) — optional</label>
+                  <input
+                    type="text"
+                    value={String(editingStep.config.gridRoi ?? '')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, gridRoi: e.target.value } } : null
+                      )
+                    }
+                    placeholder="x,y,width,height  e.g. 100,200,800,600"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-teal-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Limit OCR and click to this screen region. Leave blank for full screen.
+                  </p>
+                </div>
+
+                {/* Scroll Config */}
+                <p className="text-xs font-semibold text-teal-400 uppercase tracking-wider pt-1">Scroll Settings</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Scroll X</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.scrollX ?? 0)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, scrollX: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-teal-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Scroll Y</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.scrollY ?? 0)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, scrollY: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-teal-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Max Scroll Attempts</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={String(editingStep.config.maxScrollAttempts ?? 20)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, maxScrollAttempts: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-teal-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Scroll Step (wheel clicks)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={String(editingStep.config.scrollStep ?? 3)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, scrollStep: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-teal-500"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500">
+                  X/Y is the screen coordinate where mouse scroll events are sent. Leave at 0,0 to use the centre of the grid region. Set Max Scroll Attempts to cap how far the grid is scrolled before giving up.
+                </p>
+
+                {/* Checkbox Offset */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Checkbox X Offset (pixels left of VR text)</label>
+                  <input
+                    type="number"
+                    value={String(editingStep.config.checkboxOffset ?? 40)}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, checkboxOffset: Number(e.target.value) } } : null
+                      )
+                    }
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    How many pixels to the <strong className="text-gray-400">left</strong> of the detected VR number text to click (where the checkbox column is). Calibrate once for your grid layout.
                   </p>
                 </div>
               </>

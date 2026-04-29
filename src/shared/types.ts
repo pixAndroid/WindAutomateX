@@ -44,7 +44,8 @@ export type StepType =
   | 'detect_image'
   | 'run_task'
   | 'switch_window'
-  | 'watch_popup';
+  | 'watch_popup'
+  | 'tick_checkboxes_by_vr';
 
 export interface Run {
   id: number;

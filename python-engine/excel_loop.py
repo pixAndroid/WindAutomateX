@@ -481,6 +481,34 @@ def process_row(
                     if delay_ms > 0:
                         import time
                         time.sleep(delay_ms / 1000.0)
+                elif action_type == "tick_vr":
+                    # value is the Excel column name containing comma-separated VR numbers
+                    from vr_checkbox_ticker import tick_checkboxes_by_vr
+                    vr_list_str = str(row.get(value, "")) if value else ""
+                    if vr_list_str:
+                        tick_result = tick_checkboxes_by_vr(
+                            vr_list_str,
+                            window_title=str(action.get("windowTitle", "")),
+                            grid_roi=str(action.get("gridRoi", "")),
+                            scroll_x=int(action.get("scrollX", 0)),
+                            scroll_y=int(action.get("scrollY", 0)),
+                            max_scroll_attempts=int(action.get("maxScrollAttempts", 20)),
+                            scroll_step=int(action.get("scrollStep", 3)),
+                            checkbox_offset=int(action.get("checkboxOffset", 40)),
+                            engine=engine,
+                        )
+                        if not tick_result.get("success", False):
+                            logger.warning(
+                                "Row %d: tick_vr action partial result: %s",
+                                row_index + 1,
+                                tick_result.get("message", ""),
+                            )
+                    else:
+                        logger.warning(
+                            "Row %d: tick_vr action: column '%s' is empty or not found",
+                            row_index + 1,
+                            value,
+                        )
         elif submit_selector:
             # Backward-compatible: old single submitSelector
             click_submit(submit_selector, engine)

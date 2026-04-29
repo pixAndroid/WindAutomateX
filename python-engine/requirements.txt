@@ -6,3 +6,4 @@ pyperclip>=1.8.2
 cryptography>=38.0.0
 openpyxl>=3.1.0
 opencv-python-headless>=4.5.0
+pytesseract>=0.3.10

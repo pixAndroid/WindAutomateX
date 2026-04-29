@@ -29,6 +29,7 @@ const stepIcons: Record<StepType, string> = {
   run_task: '▶️',
   switch_window: '🔄',
   watch_popup: '👁',
+  tick_checkboxes_by_vr: '☑️',
 };
 
 const stepLabels: Record<StepType, string> = {
@@ -59,6 +60,7 @@ const stepLabels: Record<StepType, string> = {
   run_task: 'Run Linked Task',
   switch_window: 'Switch Window',
   watch_popup: 'Watch Popup (Realtime)',
+  tick_checkboxes_by_vr: 'Tick Checkboxes by VR Nos',
 };
 
 const clickTypeBadgeMap: Record<string, { label: string; className: string }> = {
@@ -98,6 +100,10 @@ const StepCard: React.FC<StepCardProps> = ({ step, index, total, isDragging, isD
       const mappingCount = Array.isArray(config.mappings) ? config.mappings.length : 0;
       const rowRange = `Rows: ${config.startRow ?? 2} to ${config.endRow ?? 'End'}`;
       configSummary = `File: ${fileName} · Mappings: ${mappingCount} fields · ${rowRange}`;
+    } else if (step.step_type === 'tick_checkboxes_by_vr') {
+      const col = config.vrColumn ? `Col: ${config.vrColumn}` : 'No column';
+      const win = config.windowTitle ? ` · Win: ${config.windowTitle}` : '';
+      configSummary = `${col}${win}`;
     } else if (step.step_type === 'watch_popup') {
       const ruleCount = Array.isArray(config.rules) ? config.rules.length : 0;
       const enabled = config.enabled !== false;

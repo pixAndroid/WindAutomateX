@@ -87,6 +87,7 @@ class WindAutomateXEngine:
             "run_task": self._run_task,
             "switch_window": self._switch_window,
             "watch_popup": self._watch_popup,
+            "tick_checkboxes_by_vr": self._tick_checkboxes_by_vr,
         }
 
         handler = handlers.get(step_type)
@@ -733,3 +734,55 @@ class WindAutomateXEngine:
                 pass
             self.active_popup_watcher = None
 
+    def _tick_checkboxes_by_vr(self, config: dict) -> dict:
+        """
+        Tick checkboxes in a desktop grid for each VR number supplied.
+
+        Config keys
+        -----------
+        vrColumn          (str)  – Excel column name (used when called from a
+                                   loop row context via the engine variable).
+                                   Ignored in standalone mode; use ``vrNumbers``
+                                   instead.
+        vrNumbers         (str)  – Literal comma-separated VR numbers.  Takes
+                                   precedence over the ``vr_numbers`` engine
+                                   variable.  Either this or an engine variable
+                                   named ``vr_numbers`` must supply the list.
+        windowTitle       (str)  – Partial window title to activate before
+                                   searching.  Blank = active window.
+        gridRoi           (str)  – Screen region as "x,y,w,h".  Blank = full
+                                   screen.
+        scrollX           (int)  – X coordinate for scroll events.
+        scrollY           (int)  – Y coordinate for scroll events.
+        maxScrollAttempts (int)  – Maximum scroll steps per VR number. Default 20.
+        scrollStep        (int)  – Mouse-wheel clicks per scroll. Default 3.
+        checkboxOffset    (int)  – Pixels left of VR text for checkbox. Default 40.
+        """
+        from vr_checkbox_ticker import tick_checkboxes_by_vr
+
+        # Resolve VR numbers string: explicit config first, then engine variable
+        vr_list_str: str = str(config.get("vrNumbers", "")).strip()
+        if not vr_list_str:
+            vr_list_str = str(self.variables.get("vr_numbers", "")).strip()
+        if not vr_list_str:
+            return {
+                "success": False,
+                "message": (
+                    "tick_checkboxes_by_vr: no VR numbers provided. "
+                    "Set 'vrNumbers' in config or store them in the 'vr_numbers' engine variable."
+                ),
+            }
+
+        result = tick_checkboxes_by_vr(
+            vr_list_str,
+            window_title=str(config.get("windowTitle", "")),
+            grid_roi=str(config.get("gridRoi", "")),
+            scroll_x=int(config.get("scrollX", 0)),
+            scroll_y=int(config.get("scrollY", 0)),
+            max_scroll_attempts=int(config.get("maxScrollAttempts", 20)),
+            scroll_step=int(config.get("scrollStep", 3)),
+            checkbox_offset=int(config.get("checkboxOffset", 40)),
+            engine=self,
+        )
+
+        return {"success": result.get("success", False), "message": result.get("message", "")}
