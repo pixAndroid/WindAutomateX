@@ -27,8 +27,8 @@ interface EditState {
 function buildScheduleValue(edit: EditState): string {
   switch (edit.type) {
     case 'once':
-      // datetime-local gives "YYYY-MM-DDTHH:MM", convert to full ISO
-      return edit.dateTime ? new Date(edit.dateTime).toISOString() : '';
+      // No schedule value needed — task runs immediately when triggered.
+      return '';
     case 'daily':
       return edit.time;
     case 'weekly':
@@ -60,17 +60,9 @@ function parseEditState(task: Task): EditState {
   };
   const v = task.schedule_value || '';
   switch (task.schedule_type) {
-    case 'once': {
-      if (v) {
-        const d = new Date(v);
-        if (!isNaN(d.getTime())) {
-          // Format as YYYY-MM-DDTHH:MM for datetime-local
-          const pad = (n: number) => String(n).padStart(2, '0');
-          base.dateTime = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-        }
-      }
+    case 'once':
+      // No schedule value — task runs immediately on trigger.
       break;
-    }
     case 'daily':
       base.time = v || '09:00';
       break;
@@ -106,11 +98,7 @@ function getNextRunLabel(task: Task): string {
     case 'startup':
       return 'On Startup';
     case 'once':
-      if (v) {
-        const d = new Date(v);
-        if (!isNaN(d.getTime())) return d.toLocaleString();
-      }
-      return 'Not set';
+      return 'Immediately on trigger';
     case 'daily':
       return v ? `Daily at ${v}` : 'Scheduled';
     case 'weekly': {
@@ -146,10 +134,10 @@ const SchedulerPage: React.FC = () => {
   const [editState, setEditState] = useState<EditState | null>(null);
   const [runningTaskIds, setRunningTaskIds] = useState<Set<number>>(new Set());
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const all = await window.electronAPI.tasks.list();
     setTasks(all);
-  };
+  }, []);
 
   // Initialise running task IDs from persisted runs
   useEffect(() => {
@@ -174,13 +162,18 @@ const SchedulerPage: React.FC = () => {
     });
   }, []);
 
+  // Reload tasks when main process pushes a task update (e.g. auto-disabling a 'once' task)
+  const handleTaskUpdated = useCallback(() => { load(); }, [load]);
+
   useEffect(() => {
     load();
     window.electronAPI.onRunUpdate(handleRunUpdate);
+    window.electronAPI.onTaskUpdated(handleTaskUpdated);
     return () => {
       window.electronAPI.offRunUpdate(handleRunUpdate);
+      window.electronAPI.offTaskUpdated(handleTaskUpdated);
     };
-  }, [handleRunUpdate]);
+  }, [handleRunUpdate, handleTaskUpdated, load]);
 
   const handleEdit = (task: Task) => {
     setEditingId(task.id);
@@ -222,14 +215,8 @@ const SchedulerPage: React.FC = () => {
     switch (edit.type) {
       case 'once':
         return (
-          <div className="flex-1">
-            <label className="block text-xs text-gray-400 mb-1">Date &amp; Time</label>
-            <input
-              type="datetime-local"
-              value={edit.dateTime}
-              onChange={(e) => updateEdit({ dateTime: e.target.value })}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-            />
+          <div className="flex-1 flex items-center text-xs text-gray-400">
+            Runs once immediately when enabled — no time value needed.
           </div>
         );
       case 'daily':

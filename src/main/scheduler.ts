@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { BrowserWindow } from 'electron';
-import { getTasks, getSteps, createRun, updateRun } from './database';
+import { getTasks, getTask, getSteps, createRun, updateRun, updateTask } from './database';
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import type { Task, TaskStep } from '../shared/types';
@@ -35,7 +35,9 @@ export function loadAndScheduleAll(): void {
 
   const tasks = getTasks();
   for (const task of tasks) {
-    if (task.enabled) {
+    // 'once' tasks must not be re-fired on every startup; they run only when
+    // explicitly triggered (enabled toggle or schedule save in the UI).
+    if (task.enabled && task.schedule_type !== 'once') {
       scheduleTask(task);
     }
   }
@@ -56,15 +58,8 @@ export function scheduleTask(task: Task): void {
       // Only runs at actual app startup via initScheduler, not on UI toggle/save
       return;
     case 'once':
-      // Parse ISO date string
-      if (task.schedule_value) {
-        const runAt = new Date(task.schedule_value);
-        const now = new Date();
-        if (runAt > now) {
-          const delay = runAt.getTime() - now.getTime();
-          setTimeout(() => runTask(task.id), delay);
-        }
-      }
+      // Run immediately, exactly once — no schedule value required.
+      runTask(task.id);
       return;
     case 'daily':
       // schedule_value = "HH:MM"
@@ -234,6 +229,16 @@ async function runTask(taskId: number, retryCount = 0): Promise<void> {
 
     if (status === 'failed' && retryCount < 3) {
       setTimeout(() => runTask(taskId, retryCount + 1), 30000 * (retryCount + 1));
+    } else {
+      // Auto-disable 'once' tasks after they complete (success) or exhaust retries,
+      // so they truly run only once and don't re-fire on a subsequent enabled toggle.
+      const task = getTask(taskId);
+      if (task && task.schedule_type === 'once') {
+        updateTask(taskId, { enabled: false });
+        if (mainWindowRef) {
+          mainWindowRef.webContents.send('task:updated', { id: taskId, enabled: false });
+        }
+      }
     }
 
     if (mainWindowRef) {
