@@ -93,10 +93,68 @@ const TaskBuilder: React.FC = () => {
   const [dragOverActionIndex, setDragOverActionIndex] = useState<number | null>(null);
   const [excelColumns, setExcelColumns] = useState<string[]>([]);
   const [allTasks, setAllTasks] = useState<Task[]>([]);
+  const [stepTypes, setStepTypes] = useState<StepType[]>(() => {
+    try {
+      const saved = localStorage.getItem('stepTypeOrder');
+      if (saved) {
+        const parsed: StepType[] = JSON.parse(saved);
+        // Merge: keep saved order, append any new types not yet saved
+        const merged = parsed.filter((t) => ALL_STEP_TYPES.includes(t));
+        ALL_STEP_TYPES.forEach((t) => { if (!merged.includes(t)) merged.push(t); });
+        return merged;
+      }
+    } catch { /* ignore */ }
+    return ALL_STEP_TYPES;
+  });
+  const [dragTypeIndex, setDragTypeIndex] = useState<number | null>(null);
+  const [dragOverTypeIndex, setDragOverTypeIndex] = useState<number | null>(null);
 
   useEffect(() => {
     window.electronAPI.tasks.list().then(setAllTasks).catch(() => setAllTasks([]));
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('stepTypeOrder', JSON.stringify(stepTypes));
+  }, [stepTypes]);
+
+  const getStepTypeLabel = (t: StepType): string => {
+    if (t === 'excel_form_submit_loop') return 'Excel Form Submit Loop (Business Automation)';
+    if (t === 'detect_image') return 'Detect Image (Window/Screen)';
+    if (t === 'run_task') return 'Run Linked Task';
+    if (t === 'switch_window') return 'Switch Window';
+    if (t === 'watch_popup') return 'Watch Popup (Realtime Dialog Watcher)';
+    return t.replace(/_/g, ' ');
+  };
+
+  const handleTypeDragStart = (index: number) => {
+    setDragTypeIndex(index);
+  };
+
+  const handleTypeDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (dragOverTypeIndex !== index) setDragOverTypeIndex(index);
+  };
+
+  const handleTypeDrop = (dropIndex: number) => {
+    if (dragTypeIndex === null || dragTypeIndex === dropIndex) {
+      setDragTypeIndex(null);
+      setDragOverTypeIndex(null);
+      return;
+    }
+    setStepTypes((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(dragTypeIndex, 1);
+      next.splice(dropIndex, 0, moved);
+      return next;
+    });
+    setDragTypeIndex(null);
+    setDragOverTypeIndex(null);
+  };
+
+  const handleTypeDragEnd = () => {
+    setDragTypeIndex(null);
+    setDragOverTypeIndex(null);
+  };
 
   useEffect(() => {
     if (isEdit && id) {
@@ -303,56 +361,50 @@ const TaskBuilder: React.FC = () => {
       </div>
 
       <div className="flex gap-6 flex-1 min-h-0">
+        {/* Step Type Picker */}
+        <div className="w-56 flex flex-col flex-shrink-0">
+          <p className="text-xs text-gray-500 mb-1 select-none">Action types — drag to reorder</p>
+          <div className="flex-1 overflow-y-auto bg-gray-800 rounded-lg border border-gray-700">
+            {stepTypes.map((t, ti) => (
+              <div
+                key={t}
+                draggable
+                onDragStart={() => handleTypeDragStart(ti)}
+                onDragOver={(e) => handleTypeDragOver(e, ti)}
+                onDrop={() => handleTypeDrop(ti)}
+                onDragEnd={handleTypeDragEnd}
+                onClick={() => setSelectedStepType(t)}
+                className={[
+                  'flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none text-sm border-l-2 transition-colors',
+                  selectedStepType === t
+                    ? 'bg-blue-600 text-white border-blue-400'
+                    : 'text-gray-300 hover:bg-gray-700 border-transparent',
+                  dragTypeIndex === ti ? 'opacity-40' : 'opacity-100',
+                  dragOverTypeIndex === ti && dragTypeIndex !== ti ? 'border-l-blue-400 bg-gray-700' : '',
+                ].join(' ')}
+              >
+                <svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor" className="flex-shrink-0 opacity-40">
+                  <circle cx="2" cy="2"  r="1"/>
+                  <circle cx="6" cy="2"  r="1"/>
+                  <circle cx="2" cy="6"  r="1"/>
+                  <circle cx="6" cy="6"  r="1"/>
+                  <circle cx="2" cy="10" r="1"/>
+                  <circle cx="6" cy="10" r="1"/>
+                </svg>
+                <span className="truncate">{getStepTypeLabel(t)}</span>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={handleAddStep}
+            className="mt-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm whitespace-nowrap w-full"
+          >
+            + Add Step
+          </button>
+        </div>
+
         {/* Steps Panel */}
         <div className="flex-1 flex flex-col">
-          <div className="flex items-center gap-3 mb-3">
-            <select
-              value={selectedStepType}
-              onChange={(e) => setSelectedStepType(e.target.value as StepType)}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm flex-1 focus:outline-none focus:border-blue-500"
-            >
-              {ALL_STEP_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t === 'excel_form_submit_loop' ? 'Excel Form Submit Loop (Business Automation)'
-                    : t === 'detect_image' ? 'Detect Image (Window/Screen)'
-                    : t === 'run_task' ? 'Run Linked Task'
-                    : t === 'switch_window' ? 'Switch Window'
-                    : t === 'watch_popup' ? 'Watch Popup (Realtime Dialog Watcher)'
-                    : t.replace(/_/g, ' ')}
-                </option>
-              ))}
-            </select>
-            <div className="flex flex-col gap-0.5 flex-shrink-0">
-              <button
-                onClick={() => {
-                  const idx = ALL_STEP_TYPES.indexOf(selectedStepType);
-                  if (idx > 0) setSelectedStepType(ALL_STEP_TYPES[idx - 1]);
-                }}
-                disabled={ALL_STEP_TYPES.indexOf(selectedStepType) === 0}
-                className="p-0.5 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed leading-none"
-                title="Previous step type"
-              >
-                ▲
-              </button>
-              <button
-                onClick={() => {
-                  const idx = ALL_STEP_TYPES.indexOf(selectedStepType);
-                  if (idx < ALL_STEP_TYPES.length - 1) setSelectedStepType(ALL_STEP_TYPES[idx + 1]);
-                }}
-                disabled={ALL_STEP_TYPES.indexOf(selectedStepType) === ALL_STEP_TYPES.length - 1}
-                className="p-0.5 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed leading-none"
-                title="Next step type"
-              >
-                ▼
-              </button>
-            </div>
-            <button
-              onClick={handleAddStep}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm whitespace-nowrap"
-            >
-              + Add Step
-            </button>
-          </div>
           <div className="flex-1 overflow-y-auto space-y-2 pr-1">
             {steps.length === 0 && (
               <div className="text-center text-gray-500 py-12">
