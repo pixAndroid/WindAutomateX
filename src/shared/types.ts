@@ -109,6 +109,7 @@ export interface ElectronAPI {
   onSchedulerChanged: (callback: (event: Electron.IpcRendererEvent, taskIds: number[]) => void) => void;
   offSchedulerChanged: (callback: (event: Electron.IpcRendererEvent, taskIds: number[]) => void) => void;
   onLogUpdate: (callback: (event: Electron.IpcRendererEvent, data: { runId: number; line: string }) => void) => void;
+  offLogUpdate: (callback: (event: Electron.IpcRendererEvent, data: { runId: number; line: string }) => void) => void;
   dialog: {
     openFile: () => Promise<string | null>;
     openExcelFile: () => Promise<string | null>;

@@ -31,7 +31,7 @@ const LogsPage: React.FC = () => {
 
   useEffect(() => {
     load();
-    window.electronAPI.onRunUpdate((_e, run) => {
+    const handleRunUpdate = (_e: Electron.IpcRendererEvent, run: import('../../shared/types').Run) => {
       setRuns((prev) => {
         const idx = prev.findIndex((r) => r.id === run.id);
         if (idx >= 0) {
@@ -41,7 +41,11 @@ const LogsPage: React.FC = () => {
         }
         return [run, ...prev];
       });
-    });
+    };
+    window.electronAPI.onRunUpdate(handleRunUpdate);
+    return () => {
+      window.electronAPI.offRunUpdate(handleRunUpdate);
+    };
   }, []);
 
   const filtered = filter === 'all' ? runs : runs.filter((r) => r.status === filter);
