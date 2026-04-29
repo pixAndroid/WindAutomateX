@@ -123,11 +123,13 @@ def _load_targets(
             "Install it with: pip install pandas openpyxl"
         ) from exc
 
-    ext = excel_path.rsplit(".", 1)[-1].lower()
+    import os
+    ext = os.path.splitext(excel_path)[1].lstrip(".").lower()
     try:
         if ext == "csv":
             df = pd.read_csv(excel_path, header=0, dtype=str)
         else:
+            # Treat any non-CSV extension (including blank) as Excel
             df = pd.read_excel(
                 excel_path,
                 sheet_name=sheet_name,
@@ -146,8 +148,11 @@ def _load_targets(
                 f"Available columns: {list(df.columns)}"
             )
 
-    # Convert start_row (1-based, counting header as row 1) to 0-based index
-    data_start_index = max(0, start_row - 2)  # header = row 1, first data = row 2
+    # Convert start_row (1-based, where row 1 is the header, row 2 is the
+    # first data row) to a 0-based DataFrame index.  Values < 2 are clamped
+    # to 0 so that start_row=2 selects the first data row and start_row=1
+    # (or lower) is treated as "start from the beginning".
+    data_start_index = max(0, start_row - 2)
     df = df.iloc[data_start_index:]
 
     # Build deduplicated list of (vr_no, item_code) pairs
@@ -690,7 +695,9 @@ def process_grid_cv(config: dict) -> dict:
     item_code_x_range: Optional[tuple[int, int]] = None
     columns_detected = False
 
-    # Deduplication: hash of the bottom row from the previous screenshot
+    # Deduplication: hash of the bottom row from the previous screenshot,
+    # used to detect whether the grid actually moved after a scroll by
+    # comparing it against the *top* row of the new screenshot.
     prev_bottom_hash: Optional[int] = None
     prev_screenshot: Optional[np.ndarray] = None
 
@@ -709,6 +716,7 @@ def process_grid_cv(config: dict) -> dict:
             break
 
         img_h, img_w = screenshot.shape[:2]
+        strip_height = max(30, img_h // 15)
 
         # ---- 5b. End-of-scroll detection (whole screenshot unchanged) ----
         if _images_nearly_equal(prev_screenshot, screenshot):
@@ -717,6 +725,19 @@ def process_grid_cv(config: dict) -> dict:
                 "the bottom of the grid (scroll %d)", scroll_count
             )
             break
+
+        # ---- 5b′. Deduplication: compare new top-strip hash with the ----
+        # hash of the *bottom* strip captured before the last scroll.      ----
+        # If they are equal the grid content did not shift (we are at the   ----
+        # bottom), so stop to avoid processing the same rows twice.         ----
+        if prev_bottom_hash is not None:
+            top_strip = screenshot[:strip_height, :]
+            if _row_hash(top_strip) == prev_bottom_hash:
+                logger.info(
+                    "process_grid_cv: new top-row matches previous bottom-row — "
+                    "grid did not scroll (scroll %d) — stopping", scroll_count
+                )
+                break
 
         # ---- 5c. Detect column headers once (first visible screenshot) ----
         if not columns_detected:
@@ -782,11 +803,15 @@ def process_grid_cv(config: dict) -> dict:
                 y_top, y_bottom, vr_text, ic_text,
             )
 
-            # Check against every remaining target (case-insensitive substring)
+            # Check against every remaining target.
+            # Match when the *target* string is a substring of the OCR result
+            # (accounts for slight OCR padding) but not the reverse, to avoid
+            # false positives from partial numbers (e.g. target "VR12" matching
+            # OCR result "VR1234" incorrectly if reversed).
             for pair in list(remaining):
                 target_vr, target_ic = pair
-                vr_match = target_vr.lower() in vr_text.lower() or vr_text.lower() in target_vr.lower()
-                ic_match = target_ic.lower() in ic_text.lower() or ic_text.lower() in target_ic.lower()
+                vr_match = target_vr.lower() in vr_text.lower()
+                ic_match = target_ic.lower() in ic_text.lower()
 
                 if vr_match and ic_match:
                     # ---- Click the checkbox ----
@@ -839,22 +864,11 @@ def process_grid_cv(config: dict) -> dict:
             logger.info("process_grid_cv: all targets found — stopping early")
             break
 
-        # ---- 5g. Deduplication via bottom-row hash ----
-        # Store a hash of the bottom row image region before scrolling.
-        # After the scroll we compare the hash of the top row area against
-        # the stored value.  If they match the grid didn't move.
-        bottom_row_height = max(30, img_h // 15)
-        bottom_strip = screenshot[img_h - bottom_row_height:, :]
-        current_bottom_hash = _row_hash(bottom_strip)
-
-        if prev_bottom_hash is not None and current_bottom_hash == prev_bottom_hash:
-            logger.info(
-                "process_grid_cv: bottom-row hash unchanged — grid has not moved "
-                "(scroll %d) — stopping", scroll_count
-            )
-            break
-
-        prev_bottom_hash = current_bottom_hash
+        # ---- 5g. Store bottom-strip hash before scrolling ----
+        # This hash is compared against the *top* strip of the next
+        # screenshot (step 5b′) to detect whether the grid actually moved.
+        bottom_strip = screenshot[img_h - strip_height:, :]
+        prev_bottom_hash = _row_hash(bottom_strip)
         prev_screenshot = screenshot.copy()
 
         # ---- 5h. Scroll down ----
@@ -877,12 +891,16 @@ def process_grid_cv(config: dict) -> dict:
 
     # Partial success (some ticked even if others had errors) is still success
     success = bool(checked)
-    parts: list[str] = [f"Checked: {checked}"]
+
+    def _fmt(pairs: list[_Pair]) -> str:
+        return ", ".join(f"{vr}|{ic}" for vr, ic in pairs)
+
+    parts: list[str] = [f"Checked {len(checked)} item(s): {_fmt(checked)}"]
     if not_found:
-        parts.append(f"Not found: {not_found}")
+        parts.append(f"Not found {len(not_found)} item(s): {_fmt(not_found)}")
     if errors:
-        parts.append(f"Errors: {errors}")
-    message = "; ".join(parts)
+        parts.append(f"{len(errors)} error(s): {'; '.join(errors)}")
+    message = " | ".join(parts)
 
     logger.info("process_grid_cv: %s", message)
     return {
@@ -891,7 +909,11 @@ def process_grid_cv(config: dict) -> dict:
         "not_found": not_found,
         "errors": errors,
         "message": message,
-        "checkbox_positions": {str(k): v for k, v in checkbox_positions.items()},
+        # Keys use "vr_no|item_code" format for unambiguous parsing by callers
+        "checkbox_positions": {
+            f"{vr}|{ic}": pos
+            for (vr, ic), pos in checkbox_positions.items()
+        },
     }
 
 
