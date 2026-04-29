@@ -64,6 +64,9 @@ class WindAutomateXEngine:
             "wait_window": self._wait_window,
             "click_element": self._click_element,
             "click_coordinate": self._click_coordinate,
+            "double_click_coordinate": self._double_click_coordinate,
+            "right_click_coordinate": self._right_click_coordinate,
+            "master_click_coordinate": self._master_click_coordinate,
             "type_text": self._type_text,
             "press_key": self._press_key,
             "keyboard_shortcut": self._keyboard_shortcut,
@@ -145,6 +148,43 @@ class WindAutomateXEngine:
         y = int(config.get("y", 0))
         pyautogui.click(x, y)
         return {"success": True, "message": f"Clicked at ({x}, {y})"}
+
+    def _double_click_coordinate(self, config: dict) -> dict:
+        if not self.pyautogui_available:
+            return {"success": False, "message": "pyautogui not available"}
+        import pyautogui
+        x = int(config.get("x", 0))
+        y = int(config.get("y", 0))
+        pyautogui.doubleClick(x, y)
+        return {"success": True, "message": f"Double-clicked at ({x}, {y})"}
+
+    def _right_click_coordinate(self, config: dict) -> dict:
+        if not self.pyautogui_available:
+            return {"success": False, "message": "pyautogui not available"}
+        import pyautogui
+        x = int(config.get("x", 0))
+        y = int(config.get("y", 0))
+        pyautogui.click(x, y, button='right')
+        return {"success": True, "message": f"Right-clicked at ({x}, {y})"}
+
+    def _master_click_coordinate(self, config: dict) -> dict:
+        if not self.pyautogui_available:
+            return {"success": False, "message": "pyautogui not available"}
+        import pyautogui
+        x = int(config.get("x", 0))
+        y = int(config.get("y", 0))
+        click_type = config.get("click_type", "left")
+        if click_type == "double":
+            pyautogui.doubleClick(x, y)
+            label = "Double-clicked"
+        elif click_type == "right":
+            pyautogui.click(x, y, button='right')
+            label = "Right-clicked"
+        else:
+            # left / single — default
+            pyautogui.click(x, y)
+            label = "Left-clicked"
+        return {"success": True, "message": f"{label} at ({x}, {y})"}
 
     def _type_text(self, config: dict) -> dict:
         if not self.pyautogui_available:

@@ -14,6 +14,7 @@ const ACTION_TYPE_COLORS: Record<string, { border: string; label: string }> = {
 
 const ALL_STEP_TYPES: StepType[] = [
   'launch_exe', 'wait_window', 'click_element', 'click_coordinate',
+  'double_click_coordinate', 'right_click_coordinate', 'master_click_coordinate',
   'type_text', 'press_key', 'keyboard_shortcut', 'select_dropdown', 'upload_file',
   'download_file', 'wait_download', 'wait_upload', 'read_text',
   'if_condition', 'loop', 'delay', 'screenshot', 'close_app', 'kill_process',
@@ -25,6 +26,9 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
   wait_window: { window_title: '', timeout: 30, delay: 60 },
   click_element: { window_title: '', element_title: '', auto_id: '', delay: 60 },
   click_coordinate: { x: 0, y: 0, delay: 60 },
+  double_click_coordinate: { x: 0, y: 0, delay: 60 },
+  right_click_coordinate: { x: 0, y: 0, delay: 60 },
+  master_click_coordinate: { x: 0, y: 0, click_type: 'left', delay: 60 },
   type_text: { text: '', interval: 0.05, delay: 60 },
   press_key: { key: '', delay: 60 },
   keyboard_shortcut: { keys: '', delay: 60 },
@@ -123,6 +127,9 @@ const TaskBuilder: React.FC = () => {
     if (t === 'run_task') return 'Run Linked Task';
     if (t === 'switch_window') return 'Switch Window';
     if (t === 'watch_popup') return 'Watch Popup (Realtime Dialog Watcher)';
+    if (t === 'double_click_coordinate') return 'Double Click Coordinates';
+    if (t === 'right_click_coordinate') return 'Right Click Coordinates';
+    if (t === 'master_click_coordinate') return 'Master Click Coordinates';
     return t.replace(/_/g, ' ');
   };
 
@@ -551,6 +558,167 @@ const TaskBuilder: React.FC = () => {
                 </button>
                 <p className="text-xs text-gray-500">
                   Click "Pick from Screen" to open an overlay — then click anywhere on screen to capture absolute screen coordinates.
+                </p>
+              </>
+            ) : editingStep.step.step_type === 'double_click_coordinate' ? (
+              <>
+                {/* X and Y fields with Pick from Screen button */}
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-1">x</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.x ?? 0)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, x: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-1">y</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.y ?? 0)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, y: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    const coords = await window.electronAPI.picker.coordinate();
+                    if (coords) {
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, x: coords.x, y: coords.y } } : null
+                      );
+                    }
+                  }}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm flex items-center justify-center gap-2"
+                >
+                  🎯 Pick from Screen
+                </button>
+                <p className="text-xs text-gray-500">
+                  Performs a double-click at the specified coordinates. Click "Pick from Screen" to capture the position.
+                </p>
+              </>
+            ) : editingStep.step.step_type === 'right_click_coordinate' ? (
+              <>
+                {/* X and Y fields with Pick from Screen button */}
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-1">x</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.x ?? 0)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, x: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-1">y</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.y ?? 0)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, y: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    const coords = await window.electronAPI.picker.coordinate();
+                    if (coords) {
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, x: coords.x, y: coords.y } } : null
+                      );
+                    }
+                  }}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm flex items-center justify-center gap-2"
+                >
+                  🎯 Pick from Screen
+                </button>
+                <p className="text-xs text-gray-500">
+                  Performs a right-click at the specified coordinates. Click "Pick from Screen" to capture the position.
+                </p>
+              </>
+            ) : editingStep.step.step_type === 'master_click_coordinate' ? (
+              <>
+                {/* Click Type selector */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Click Type</label>
+                  <select
+                    value={String(editingStep.config.click_type ?? 'left')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, click_type: e.target.value } } : null
+                      )
+                    }
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="left">Left Click (single)</option>
+                    <option value="right">Right Click</option>
+                    <option value="double">Double Click</option>
+                  </select>
+                </div>
+                {/* X and Y fields with Pick from Screen button */}
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-1">x</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.x ?? 0)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, x: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-1">y</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.y ?? 0)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, y: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    const coords = await window.electronAPI.picker.coordinate();
+                    if (coords) {
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, x: coords.x, y: coords.y } } : null
+                      );
+                    }
+                  }}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm flex items-center justify-center gap-2"
+                >
+                  🎯 Pick from Screen
+                </button>
+                <p className="text-xs text-gray-500">
+                  Master click handles all click types — left (single), right, or double — at the specified coordinates. Click "Pick from Screen" to capture the position.
                 </p>
               </>
             ) : editingStep.step.step_type === 'keyboard_shortcut' ? (
