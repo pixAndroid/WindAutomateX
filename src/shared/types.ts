@@ -103,6 +103,8 @@ export interface ElectronAPI {
   };
   onRunUpdate: (callback: (event: Electron.IpcRendererEvent, run: Run) => void) => void;
   offRunUpdate: (callback: (event: Electron.IpcRendererEvent, run: Run) => void) => void;
+  onTaskUpdated: (callback: (event: Electron.IpcRendererEvent, data: { id: number; enabled: boolean }) => void) => void;
+  offTaskUpdated: (callback: (event: Electron.IpcRendererEvent, data: { id: number; enabled: boolean }) => void) => void;
   onLogUpdate: (callback: (event: Electron.IpcRendererEvent, data: { runId: number; line: string }) => void) => void;
   dialog: {
     openFile: () => Promise<string | null>;
