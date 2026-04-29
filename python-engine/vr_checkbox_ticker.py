@@ -356,7 +356,24 @@ def _ocr_find_text_with_item_code(
             )
 
     vr_bboxes = _find_all_bboxes(data, vr_text, x_range=vr_x_range)
+    # Fall back to full-width VR search when column restriction yields nothing
+    if not vr_bboxes and vr_x_range is not None:
+        logger.debug(
+            "_ocr_find_text_with_item_code: VR '%s' not found in column x-range — "
+            "retrying full-width",
+            vr_text,
+        )
+        vr_bboxes = _find_all_bboxes(data, vr_text)
+
     code_bboxes = _find_all_bboxes(data, item_code, x_range=code_x_range)
+    # Fall back to full-width item-code search when column restriction yields nothing
+    if not code_bboxes and code_x_range is not None:
+        logger.debug(
+            "_ocr_find_text_with_item_code: item code '%s' not found in column x-range — "
+            "retrying full-width",
+            item_code,
+        )
+        code_bboxes = _find_all_bboxes(data, item_code)
 
     if not vr_bboxes or not code_bboxes:
         return None
@@ -434,6 +451,7 @@ def tick_checkboxes_by_vr(
     item_code: str = "",
     vr_col_header: str = "",
     item_code_col_header: str = "",
+    row_tolerance: int = 12,
     engine=None,
 ) -> dict:
     """
@@ -474,6 +492,11 @@ def tick_checkboxes_by_vr(
         On-screen column header for the Item Code column.  When supplied,
         item code searches are restricted to that column's x-range.
         Typically the same value as the Excel ``itemCodeColumn`` field.
+    row_tolerance : int
+        Maximum pixel difference between the y-centres of the VR text and
+        the Item Code text for them to be considered on the same grid row.
+        Increase this value for grids with taller or inconsistently-sized
+        rows.  Default is ``12``.
     engine : WindAutomateXEngine | None
         Shared engine instance used for pywinauto window activation.
 
@@ -559,6 +582,7 @@ def tick_checkboxes_by_vr(
                 if item_code:
                     bbox = _ocr_find_text_with_item_code(
                         screenshot, vr_number, item_code,
+                        row_tolerance=row_tolerance,
                         vr_col_header=vr_col_header,
                         item_code_col_header=item_code_col_header,
                     )

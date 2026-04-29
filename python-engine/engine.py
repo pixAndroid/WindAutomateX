@@ -798,6 +798,7 @@ class WindAutomateXEngine:
             item_code=item_code,
             vr_col_header=str(config.get("vrColumn", "")).strip(),
             item_code_col_header=str(config.get("itemCodeColumn", "")).strip(),
+            row_tolerance=int(config.get("rowTolerance", 12)),
             engine=self,
         )
 

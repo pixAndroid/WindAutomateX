@@ -499,8 +499,9 @@ def process_row(
                             scroll_step=int(action.get("scrollStep", 3)),
                             checkbox_offset=int(action.get("checkboxOffset", 40)),
                             item_code=item_code,
-                            vr_col_header=str(action.get("vrColumn", "")).strip(),
+                            vr_col_header=str(action.get("vrColumn", "") or value).strip(),
                             item_code_col_header=str(action.get("itemCodeColumn", "")).strip(),
+                            row_tolerance=int(action.get("rowTolerance", 12)),
                             engine=engine,
                         )
                         if not tick_result.get("success", False):
