@@ -24,7 +24,7 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
     const updatedTask = updateTask(id, task);
     if (task.enabled !== undefined) {
       if (task.enabled) {
-        scheduleTask(updatedTask);
+        scheduleTask(updatedTask, true);
       } else {
         unscheduleTask(id);
       }
@@ -33,7 +33,7 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
       (task.schedule_value !== undefined && task.schedule_value !== originalTask?.schedule_value)
     )) {
       // Re-schedule with new values when schedule actually changes on an already-enabled task
-      scheduleTask(updatedTask);
+      scheduleTask(updatedTask, true);
     }
     return updatedTask;
   });
