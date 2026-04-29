@@ -6,11 +6,16 @@ grid window using OCR, and ticks its corresponding checkbox.  If a VR
 number is not currently visible the grid is auto-scrolled until it is
 found or the scroll limit is reached.
 
+When an optional *item_code* is supplied, the row is only ticked when
+**both** the VR number and the Item Code appear on the same grid row
+(matching y-centre within a small tolerance).  This prevents accidentally
+ticking a duplicate VR number that belongs to a different item.
+
 Public API
 ----------
 tick_checkboxes_by_vr(vr_list_str, *, window_title, grid_roi,
                       scroll_x, scroll_y, max_scroll_attempts,
-                      scroll_step, checkbox_offset, engine) -> dict
+                      scroll_step, checkbox_offset, item_code, engine) -> dict
     Main entry-point.  Returns a result dict with keys:
         success      – True when at least one VR was checked without error
         checked      – list of VR numbers successfully ticked
@@ -76,13 +81,12 @@ def _images_are_same(img1, img2, threshold: float = 0.995) -> bool:
 # OCR helpers
 # ---------------------------------------------------------------------------
 
-def _ocr_find_text(image, search_text: str) -> Optional[tuple]:
+def _ocr_get_data(image):
     """
-    Use pytesseract to locate *search_text* in *image*.
+    Run pytesseract on *image* and return the raw data dict.
 
-    Returns an (x, y, w, h) bounding box **relative to image**, or None.
-    The search is case-insensitive and also matches when *search_text* is a
-    sub-string of a recognised word (handles slight OCR mis-reads).
+    Raises ``ImportError`` when pytesseract is not installed so the caller
+    can surface a clear message to the user.
     """
     try:
         import pytesseract
@@ -96,20 +100,68 @@ def _ocr_find_text(image, search_text: str) -> Optional[tuple]:
     import cv2
 
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY) if image.ndim == 3 else image
+    return pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT)
 
-    data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT)
 
+def _find_all_bboxes(ocr_data: dict, search_text: str) -> list[tuple[int, int, int, int]]:
+    """
+    Return **all** bounding boxes whose OCR word contains *search_text*
+    (case-insensitive sub-string match).
+
+    Each entry is an ``(x, y, w, h)`` tuple relative to the captured image.
+    """
     needle = search_text.lower()
-    for i, word in enumerate(data["text"]):
+    results: list[tuple[int, int, int, int]] = []
+    for i, word in enumerate(ocr_data["text"]):
         if not word:
             continue
         if needle in word.lower():
-            x = int(data["left"][i])
-            y = int(data["top"][i])
-            w = int(data["width"][i])
-            h = int(data["height"][i])
+            x = int(ocr_data["left"][i])
+            y = int(ocr_data["top"][i])
+            w = int(ocr_data["width"][i])
+            h = int(ocr_data["height"][i])
             if w > 0 and h > 0:
-                return (x, y, w, h)
+                results.append((x, y, w, h))
+    return results
+
+
+def _ocr_find_text(image, search_text: str) -> Optional[tuple]:
+    """
+    Use pytesseract to locate the **first** occurrence of *search_text* in
+    *image*.
+
+    Returns an (x, y, w, h) bounding box **relative to image**, or None.
+    The search is case-insensitive and also matches when *search_text* is a
+    sub-string of a recognised word (handles slight OCR mis-reads).
+    """
+    data = _ocr_get_data(image)
+    bboxes = _find_all_bboxes(data, search_text)
+    return bboxes[0] if bboxes else None
+
+
+def _ocr_find_text_with_item_code(
+    image, vr_text: str, item_code: str, row_tolerance: int = 12
+) -> Optional[tuple]:
+    """
+    Locate *vr_text* in *image* **only when** *item_code* also appears on
+    the same grid row (y-centres within *row_tolerance* pixels).
+
+    Returns the VR text bounding box ``(x, y, w, h)`` if a matching pair is
+    found, otherwise ``None``.
+    """
+    data = _ocr_get_data(image)
+    vr_bboxes = _find_all_bboxes(data, vr_text)
+    code_bboxes = _find_all_bboxes(data, item_code)
+
+    if not vr_bboxes or not code_bboxes:
+        return None
+
+    for vr_bbox in vr_bboxes:
+        vr_cy = vr_bbox[1] + vr_bbox[3] // 2
+        for code_bbox in code_bboxes:
+            code_cy = code_bbox[1] + code_bbox[3] // 2
+            if abs(vr_cy - code_cy) <= row_tolerance:
+                return vr_bbox
     return None
 
 
@@ -169,6 +221,7 @@ def tick_checkboxes_by_vr(
     max_scroll_attempts: int = 20,
     scroll_step: int = 3,
     checkbox_offset: int = 40,
+    item_code: str = "",
     engine=None,
 ) -> dict:
     """
@@ -194,6 +247,10 @@ def tick_checkboxes_by_vr(
     checkbox_offset : int
         Horizontal pixels to the **left** of the detected VR text where the
         checkbox column lives.
+    item_code : str
+        When provided, a VR number is only ticked when both the VR number
+        **and** this item code appear on the same grid row.  Rows where only
+        the VR number matches (but the item code differs) are skipped.
     engine : WindAutomateXEngine | None
         Shared engine instance used for pywinauto window activation.
 
@@ -266,7 +323,10 @@ def tick_checkboxes_by_vr(
 
             # --- OCR search ---
             try:
-                bbox = _ocr_find_text(screenshot, vr_number)
+                if item_code:
+                    bbox = _ocr_find_text_with_item_code(screenshot, vr_number, item_code)
+                else:
+                    bbox = _ocr_find_text(screenshot, vr_number)
             except ImportError as exc:
                 msg = f"{vr_number}: OCR unavailable — {exc}"
                 logger.error(msg)

@@ -1169,6 +1169,27 @@ const TaskBuilder: React.FC = () => {
                               </datalist>
                             )}
                           </div>
+                          {/* Item Code Column */}
+                          <div className="flex gap-2 items-center">
+                            <label className="text-xs text-gray-400 w-28 shrink-0">Item Code Column</label>
+                            <input
+                              type="text"
+                              list={`excel-cols-item-code-action-${ai}`}
+                              value={String((action as { type: string; value: string; itemCodeColumn?: string }).itemCodeColumn ?? '')}
+                              onChange={(e) => {
+                                const submitActions = [...(editingStep.config.submitActions as { type: string; value: string; [key: string]: unknown }[])];
+                                submitActions[ai] = { ...submitActions[ai], itemCodeColumn: e.target.value };
+                                setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                              }}
+                              placeholder={excelColumns.length > 0 ? 'Pick column…' : 'Column name (optional)'}
+                              className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-teal-500"
+                            />
+                            {excelColumns.length > 0 && (
+                              <datalist id={`excel-cols-item-code-action-${ai}`}>
+                                {excelColumns.map((col) => <option key={col} value={col} />)}
+                              </datalist>
+                            )}
+                          </div>
                           {/* Window Title */}
                           <div className="flex gap-2 items-center">
                             <label className="text-xs text-gray-400 w-28 shrink-0">Window Title</label>
@@ -1964,6 +1985,32 @@ const TaskBuilder: React.FC = () => {
                     Name of the Excel column containing VR numbers separated by commas (e.g. <code className="text-gray-400">EZ25Y-042, EZ25Y-047</code>).
                     Used when this step runs inside an Excel Form Submit Loop.
                     Leave blank to pass VR numbers from an engine variable named <code className="text-gray-400">vr_numbers</code>.
+                  </p>
+                </div>
+
+                {/* Item Code Column */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Item Code Column (Excel) — optional</label>
+                  <input
+                    type="text"
+                    list="excel-cols-item-code"
+                    value={String(editingStep.config.itemCodeColumn ?? '')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, itemCodeColumn: e.target.value } } : null
+                      )
+                    }
+                    placeholder="e.g. Item_Code"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500"
+                  />
+                  {excelColumns.length > 0 && (
+                    <datalist id="excel-cols-item-code">
+                      {excelColumns.map((col) => <option key={col} value={col} />)}
+                    </datalist>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    When set, a grid row is only ticked when <strong className="text-gray-400">both</strong> the VR number and this Item Code appear on the same row.
+                    Leave blank to match by VR number alone; the engine will also check for a variable named <code className="text-gray-400">item_code</code> if one is set.
                   </p>
                 </div>
 

@@ -485,6 +485,9 @@ def process_row(
                     # value is the Excel column name containing comma-separated VR numbers
                     from vr_checkbox_ticker import tick_checkboxes_by_vr
                     vr_list_str = str(row.get(value, "")) if value else ""
+                    # Resolve Item Code from its own Excel column (if configured)
+                    item_code_column = str(action.get("itemCodeColumn", "")).strip()
+                    item_code = str(row.get(item_code_column, "")).strip() if item_code_column else ""
                     if vr_list_str:
                         tick_result = tick_checkboxes_by_vr(
                             vr_list_str,
@@ -495,6 +498,7 @@ def process_row(
                             max_scroll_attempts=int(action.get("maxScrollAttempts", 20)),
                             scroll_step=int(action.get("scrollStep", 3)),
                             checkbox_offset=int(action.get("checkboxOffset", 40)),
+                            item_code=item_code,
                             engine=engine,
                         )
                         if not tick_result.get("success", False):
