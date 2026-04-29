@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { BrowserWindow } from 'electron';
-import { getTasks, getTask, getSteps, createRun, updateRun, updateTask } from './database';
+import { getTasks, getTask, getSteps, createRun, updateRun, updateTask, getSettings } from './database';
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import type { Task, TaskStep } from '../shared/types';
@@ -43,7 +43,7 @@ export function loadAndScheduleAll(): void {
   }
 }
 
-export function scheduleTask(task: Task): void {
+export function scheduleTask(task: Task, triggerNow = false): void {
   if (scheduledTasks.has(task.id)) {
     scheduledTasks.get(task.id)!.stop();
     scheduledTasks.delete(task.id);
@@ -114,22 +114,38 @@ export function scheduleTask(task: Task): void {
         cronExpression = `* * * * *`;
       }
       break;
-    case 'interval':
+    case 'interval': {
       // schedule_value = interval in minutes
       if (task.schedule_value) {
         const intervalMin = parseInt(task.schedule_value, 10);
-        if (!isNaN(intervalMin) && intervalMin > 0) {
+        if (!isNaN(intervalMin) && intervalMin > 0 && intervalMin <= 59) {
           cronExpression = `*/${intervalMin} * * * *`;
+        } else if (!isNaN(intervalMin) && intervalMin >= 60) {
+          // For intervals >= 60 minutes, convert to an hourly cron expression.
+          // e.g. 60 min -> "0 */1 * * *", 120 min -> "0 */2 * * *"
+          const hours = Math.max(1, Math.floor(intervalMin / 60));
+          cronExpression = `0 */${hours} * * *`;
         }
       }
       break;
+    }
   }
 
   if (cronExpression) {
-    const scheduled = cron.schedule(cronExpression, () => {
-      runTask(task.id);
-    }, { runOnInit: false });
-    scheduledTasks.set(task.id, scheduled);
+    try {
+      const scheduled = cron.schedule(cronExpression, () => {
+        runTask(task.id);
+      }, { runOnInit: false });
+      scheduledTasks.set(task.id, scheduled);
+
+      // Run the task immediately on the first enable/re-schedule so the user
+      // doesn't have to wait for the first cron tick after toggling the task on.
+      if (triggerNow) {
+        runTask(task.id);
+      }
+    } catch (err) {
+      console.error(`Failed to schedule task ${task.id} with expression "${cronExpression}":`, err);
+    }
   }
 }
 
@@ -181,7 +197,8 @@ async function runTask(taskId: number, retryCount = 0): Promise<void> {
   }
 
   const enginePath = path.join(__dirname, '../../python-engine/ipc_handler.py');
-  const python = pythonPathRef || (process.platform === 'win32' ? 'python' : 'python3');
+  const settings = getSettings();
+  const python = settings.python_path || pythonPathRef || (process.platform === 'win32' ? 'python' : 'python3');
   const proc = spawn(python, [enginePath], { stdio: ['pipe', 'pipe', 'pipe'] });
 
   runningScheduledProcesses.set(taskId, { proc, runId: run.id });
