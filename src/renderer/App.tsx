@@ -8,7 +8,6 @@ import TaskBuilder from './pages/TaskBuilder';
 import SchedulerPage from './pages/SchedulerPage';
 import LogsPage from './pages/LogsPage';
 import SettingsPage from './pages/SettingsPage';
-import ActionsPage from './pages/ActionsPage';
 
 const App: React.FC = () => {
   return (
@@ -26,7 +25,6 @@ const App: React.FC = () => {
               <Route path="/scheduler" element={<SchedulerPage />} />
               <Route path="/logs" element={<LogsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/actions" element={<ActionsPage />} />
             </Routes>
           </main>
         </div>

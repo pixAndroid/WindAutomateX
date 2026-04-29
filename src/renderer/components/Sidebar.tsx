@@ -10,7 +10,6 @@ interface NavItem {
 const navItems: NavItem[] = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊' },
   { path: '/tasks', label: 'Task Manager', icon: '📋' },
-  { path: '/actions', label: 'Actions', icon: '⚡' },
   { path: '/scheduler', label: 'Scheduler', icon: '🕐' },
   { path: '/logs', label: 'Logs', icon: '📄' },
   { path: '/settings', label: 'Settings', icon: '⚙️' },
