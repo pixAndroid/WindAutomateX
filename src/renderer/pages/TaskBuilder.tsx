@@ -322,6 +322,30 @@ const TaskBuilder: React.FC = () => {
                 </option>
               ))}
             </select>
+            <div className="flex flex-col gap-0.5 flex-shrink-0">
+              <button
+                onClick={() => {
+                  const idx = ALL_STEP_TYPES.indexOf(selectedStepType);
+                  if (idx > 0) setSelectedStepType(ALL_STEP_TYPES[idx - 1]);
+                }}
+                disabled={ALL_STEP_TYPES.indexOf(selectedStepType) === 0}
+                className="p-0.5 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed leading-none"
+                title="Previous step type"
+              >
+                ▲
+              </button>
+              <button
+                onClick={() => {
+                  const idx = ALL_STEP_TYPES.indexOf(selectedStepType);
+                  if (idx < ALL_STEP_TYPES.length - 1) setSelectedStepType(ALL_STEP_TYPES[idx + 1]);
+                }}
+                disabled={ALL_STEP_TYPES.indexOf(selectedStepType) === ALL_STEP_TYPES.length - 1}
+                className="p-0.5 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed leading-none"
+                title="Next step type"
+              >
+                ▼
+              </button>
+            </div>
             <button
               onClick={handleAddStep}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm whitespace-nowrap"
