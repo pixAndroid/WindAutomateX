@@ -9,7 +9,7 @@ import {
   getSettings, saveSettings,
 } from './database';
 import type { Task, TaskStep, Credential, Settings } from '../shared/types';
-import { stopScheduledTask, scheduleTask, unscheduleTask } from './scheduler';
+import { stopScheduledTask, scheduleTask, unscheduleTask, getScheduledTaskIds } from './scheduler';
 
 const runningProcesses = new Map<number, ChildProcess>();
 
@@ -336,7 +336,12 @@ export function setupIPC(mainWindow: BrowserWindow, pythonPath: string): void {
 
   ipcMain.handle('scheduler:stopTask', (_e, taskId: number) => {
     stopScheduledTask(taskId);
+    // Disable the task so it won't be re-scheduled on the next app launch
+    updateTask(taskId, { enabled: false });
+    mainWindow.webContents.send('task:updated', { id: taskId, enabled: false });
   });
+
+  ipcMain.handle('scheduler:getScheduledTaskIds', () => getScheduledTaskIds());
 
   ipcMain.handle('task:pause', (_e, _runId: number) => {
     // Pause not directly supported; could send signal

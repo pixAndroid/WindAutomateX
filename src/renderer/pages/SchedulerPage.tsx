@@ -133,19 +133,23 @@ const SchedulerPage: React.FC = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [runningTaskIds, setRunningTaskIds] = useState<Set<number>>(new Set());
+  const [scheduledTaskIds, setScheduledTaskIds] = useState<Set<number>>(new Set());
 
   const load = useCallback(async () => {
     const all = await window.electronAPI.tasks.list();
     setTasks(all);
   }, []);
 
-  // Initialise running task IDs from persisted runs
+  // Initialise running task IDs from persisted runs and scheduled task IDs from the main process
   useEffect(() => {
     window.electronAPI.runs.list().then((runs: Run[]) => {
       const ids = new Set(
         runs.filter((r) => r.status === 'running').map((r) => r.task_id)
       );
       setRunningTaskIds(ids);
+    });
+    window.electronAPI.scheduler.getScheduledTaskIds().then((ids: number[]) => {
+      setScheduledTaskIds(new Set(ids));
     });
   }, []);
 
@@ -165,15 +169,22 @@ const SchedulerPage: React.FC = () => {
   // Reload tasks when main process pushes a task update (e.g. auto-disabling a 'once' task)
   const handleTaskUpdated = useCallback(() => { load(); }, [load]);
 
+  // Track which tasks have active cron schedules
+  const handleSchedulerChanged = useCallback((_event: Electron.IpcRendererEvent, taskIds: number[]) => {
+    setScheduledTaskIds(new Set(taskIds));
+  }, []);
+
   useEffect(() => {
     load();
     window.electronAPI.onRunUpdate(handleRunUpdate);
     window.electronAPI.onTaskUpdated(handleTaskUpdated);
+    window.electronAPI.onSchedulerChanged(handleSchedulerChanged);
     return () => {
       window.electronAPI.offRunUpdate(handleRunUpdate);
       window.electronAPI.offTaskUpdated(handleTaskUpdated);
+      window.electronAPI.offSchedulerChanged(handleSchedulerChanged);
     };
-  }, [handleRunUpdate, handleTaskUpdated, load]);
+  }, [handleRunUpdate, handleTaskUpdated, handleSchedulerChanged, load]);
 
   const handleEdit = (task: Task) => {
     setEditingId(task.id);
@@ -200,17 +211,21 @@ const SchedulerPage: React.FC = () => {
     load();
   };
 
+  const removeFromTaskIdSet = (setter: React.Dispatch<React.SetStateAction<Set<number>>>, taskId: number) => {
+    setter((prev) => {
+      const next = new Set(prev);
+      next.delete(taskId);
+      return next;
+    });
+  };
+
   const handleStop = async (task: Task) => {
     try {
       await window.electronAPI.scheduler.stopTask(task.id);
       showToast(`Task "${task.name}" stopped`, 'info');
-      // Optimistically clear the running state immediately so the UI updates
-      // even if the run:update IPC event is delayed or not received
-      setRunningTaskIds((prev) => {
-        const next = new Set(prev);
-        next.delete(task.id);
-        return next;
-      });
+      // Optimistically clear both running and scheduled state immediately
+      removeFromTaskIdSet(setRunningTaskIds, task.id);
+      removeFromTaskIdSet(setScheduledTaskIds, task.id);
     } catch {
       showToast(`Failed to stop task "${task.name}"`, 'error');
     }
@@ -388,7 +403,7 @@ const SchedulerPage: React.FC = () => {
                   </td>
                   <td className="p-4">
                     <div className="flex items-center gap-2">
-                      {runningTaskIds.has(task.id) && (
+                      {(runningTaskIds.has(task.id) || scheduledTaskIds.has(task.id)) && (
                         <button
                           onClick={() => handleStop(task)}
                           className="text-red-400 hover:text-red-300 text-sm font-medium"

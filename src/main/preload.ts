@@ -34,6 +34,7 @@ const api: ElectronAPI = {
   },
   scheduler: {
     stopTask: (taskId) => ipcRenderer.invoke('scheduler:stopTask', taskId),
+    getScheduledTaskIds: () => ipcRenderer.invoke('scheduler:getScheduledTaskIds'),
   },
   onRunUpdate: (callback) => {
     ipcRenderer.on('run:update', callback);
@@ -46,6 +47,12 @@ const api: ElectronAPI = {
   },
   offTaskUpdated: (callback) => {
     ipcRenderer.removeListener('task:updated', callback);
+  },
+  onSchedulerChanged: (callback) => {
+    ipcRenderer.on('scheduler:changed', callback);
+  },
+  offSchedulerChanged: (callback) => {
+    ipcRenderer.removeListener('scheduler:changed', callback);
   },
   onLogUpdate: (callback) => {
     ipcRenderer.on('log:update', callback);
