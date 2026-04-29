@@ -68,6 +68,7 @@ cb_offset           (int)   Horizontal pixels to the *left* of the start
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Optional
 
@@ -159,9 +160,14 @@ def _load_targets(
     seen: set[_Pair] = set()
     pairs: list[_Pair] = []
     for _, row in df.iterrows():
-        vr = str(row[vr_col]).strip()
-        code = str(row[item_code_col]).strip()
-        if vr and code and vr.lower() != "nan" and code.lower() != "nan":
+        vr_raw = row[vr_col]
+        code_raw = row[item_code_col]
+        # Use pd.notna to robustly exclude NaN / None / NaT values
+        if not pd.notna(vr_raw) or not pd.notna(code_raw):
+            continue
+        vr = str(vr_raw).strip()
+        code = str(code_raw).strip()
+        if vr and code:
             pair: _Pair = (vr, code)
             if pair not in seen:
                 seen.add(pair)
@@ -206,7 +212,11 @@ def _images_nearly_equal(img_a: np.ndarray, img_b: np.ndarray, threshold: float 
         return False
     if img_a.shape != img_b.shape:
         return False
-    diff = cv2.absdiff(img_a, img_b)
+    # Convert to grayscale first so each pixel contributes a single value,
+    # making the non-zero ratio truly per-pixel (not inflated by 3 channels).
+    gray_a = cv2.cvtColor(img_a, cv2.COLOR_RGB2GRAY) if img_a.ndim == 3 else img_a
+    gray_b = cv2.cvtColor(img_b, cv2.COLOR_RGB2GRAY) if img_b.ndim == 3 else img_b
+    diff = cv2.absdiff(gray_a, gray_b)
     non_zero_ratio = np.count_nonzero(diff) / max(diff.size, 1)
     return non_zero_ratio < (1.0 - threshold)
 
@@ -321,8 +331,10 @@ def _segment_rows_contour(
     """
     import cv2
 
-    # Horizontal dilation merges fragments within the same row
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (binary.shape[1] // 2, 1))
+    # Horizontal dilation merges text fragments within the same row.
+    # Use a fixed, moderate width rather than a fraction of image width
+    # to avoid excessive kernel sizes on wide screenshots.
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (60, 1))
     dilated = cv2.dilate(binary, kernel, iterations=2)
 
     contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -383,8 +395,10 @@ def _detect_column_x_ranges(
         if best is None:
             return None
         col_center = best["x"] + best["w"] // 2
-        half_width = max(best["w"] * 2, 60)
-        return (max(0, col_center - half_width), col_center + half_width)
+        # column_padding is the total offset applied left and right of the
+        # column centre, so the returned range is (centre - padding, centre + padding)
+        column_padding = max(best["w"] * 2, 60)
+        return (max(0, col_center - column_padding), col_center + column_padding)
 
     vr_range = _find_range(vr_header)
     ic_range = _find_range(item_code_header)
@@ -695,11 +709,10 @@ def process_grid_cv(config: dict) -> dict:
     item_code_x_range: Optional[tuple[int, int]] = None
     columns_detected = False
 
-    # Deduplication: hash of the bottom row from the previous screenshot,
+    # Deduplication: hash of the bottom strip from the previous screenshot,
     # used to detect whether the grid actually moved after a scroll by
-    # comparing it against the *top* row of the new screenshot.
+    # comparing it against the *top* strip of the new screenshot.
     prev_bottom_hash: Optional[int] = None
-    prev_screenshot: Optional[np.ndarray] = None
 
     # ------------------------------------------------------------------
     # 5.  Main vision loop
@@ -718,18 +731,10 @@ def process_grid_cv(config: dict) -> dict:
         img_h, img_w = screenshot.shape[:2]
         strip_height = max(30, img_h // 15)
 
-        # ---- 5b. End-of-scroll detection (whole screenshot unchanged) ----
-        if _images_nearly_equal(prev_screenshot, screenshot):
-            logger.info(
-                "process_grid_cv: screen unchanged after scroll — reached "
-                "the bottom of the grid (scroll %d)", scroll_count
-            )
-            break
-
-        # ---- 5b′. Deduplication: compare new top-strip hash with the ----
-        # hash of the *bottom* strip captured before the last scroll.      ----
-        # If they are equal the grid content did not shift (we are at the   ----
-        # bottom), so stop to avoid processing the same rows twice.         ----
+        # ---- 5b. Deduplication: compare new top-strip hash with the ----
+        # hash of the *bottom* strip captured before the last scroll.    ----
+        # If they are equal the grid content did not shift (we are at    ----
+        # the bottom), so stop to avoid processing the same rows twice.  ----
         if prev_bottom_hash is not None:
             top_strip = screenshot[:strip_height, :]
             if _row_hash(top_strip) == prev_bottom_hash:
@@ -804,14 +809,19 @@ def process_grid_cv(config: dict) -> dict:
             )
 
             # Check against every remaining target.
-            # Match when the *target* string is a substring of the OCR result
-            # (accounts for slight OCR padding) but not the reverse, to avoid
-            # false positives from partial numbers (e.g. target "VR12" matching
-            # OCR result "VR1234" incorrectly if reversed).
+            # Use word-boundary regex matching: the target must appear as a
+            # complete token in the OCR result (e.g. target "VR12" must not
+            # match OCR "VR123" or "VR1234").  The \b anchor prevents
+            # partial-number false positives while still tolerating leading/
+            # trailing punctuation or whitespace that OCR sometimes adds.
             for pair in list(remaining):
                 target_vr, target_ic = pair
-                vr_match = target_vr.lower() in vr_text.lower()
-                ic_match = target_ic.lower() in ic_text.lower()
+                vr_match = bool(re.search(
+                    r"\b" + re.escape(target_vr) + r"\b", vr_text, re.IGNORECASE
+                ))
+                ic_match = bool(re.search(
+                    r"\b" + re.escape(target_ic) + r"\b", ic_text, re.IGNORECASE
+                ))
 
                 if vr_match and ic_match:
                     # ---- Click the checkbox ----
@@ -866,10 +876,9 @@ def process_grid_cv(config: dict) -> dict:
 
         # ---- 5g. Store bottom-strip hash before scrolling ----
         # This hash is compared against the *top* strip of the next
-        # screenshot (step 5b′) to detect whether the grid actually moved.
+        # screenshot (step 5b) to detect whether the grid actually moved.
         bottom_strip = screenshot[img_h - strip_height:, :]
         prev_bottom_hash = _row_hash(bottom_strip)
-        prev_screenshot = screenshot.copy()
 
         # ---- 5h. Scroll down ----
         if scroll_count < max_scroll:
