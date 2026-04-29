@@ -748,6 +748,13 @@ class WindAutomateXEngine:
                                    precedence over the ``vr_numbers`` engine
                                    variable.  Either this or an engine variable
                                    named ``vr_numbers`` must supply the list.
+        itemCodeColumn    (str)  – Excel column name whose value is used as the
+                                   Item Code filter (loop context only).
+        itemCode          (str)  – Literal Item Code value.  When provided (or
+                                   resolved from the ``item_code`` engine
+                                   variable), a VR row is only ticked when both
+                                   the VR number and this code appear on the
+                                   same grid row.
         windowTitle       (str)  – Partial window title to activate before
                                    searching.  Blank = active window.
         gridRoi           (str)  – Screen region as "x,y,w,h".  Blank = full
@@ -773,6 +780,11 @@ class WindAutomateXEngine:
                 ),
             }
 
+        # Resolve Item Code: explicit config first, then engine variable
+        item_code: str = str(config.get("itemCode", "")).strip()
+        if not item_code:
+            item_code = str(self.variables.get("item_code", "")).strip()
+
         result = tick_checkboxes_by_vr(
             vr_list_str,
             window_title=str(config.get("windowTitle", "")),
@@ -782,6 +794,7 @@ class WindAutomateXEngine:
             max_scroll_attempts=int(config.get("maxScrollAttempts", 20)),
             scroll_step=int(config.get("scrollStep", 3)),
             checkbox_offset=int(config.get("checkboxOffset", 40)),
+            item_code=item_code,
             engine=self,
         )
 
