@@ -112,26 +112,55 @@ def extract_text(img_preprocessed: "np.ndarray", use_easyocr: bool = False):  # 
         except ImportError:
             logger.warning("easyocr not available, falling back to pytesseract")
 
-    # pytesseract
-    import pytesseract
-    from pytesseract import Output
+    # pytesseract (with automatic EasyOCR fallback if Tesseract binary is missing)
+    try:
+        import pytesseract
+        from pytesseract import Output
 
-    data = pytesseract.image_to_data(img_preprocessed, output_type=Output.DICT)
-    n = len(data["text"])
-    for i in range(n):
-        text = str(data["text"][i]).strip()
-        if not text:
+        data = pytesseract.image_to_data(img_preprocessed, output_type=Output.DICT)
+        n = len(data["text"])
+        for i in range(n):
+            text = str(data["text"][i]).strip()
+            if not text:
+                continue
+            conf = int(data["conf"][i])
+            if conf < 0:
+                continue
+            results.append({
+                "text": text,
+                "x": int(data["left"][i]),
+                "y": int(data["top"][i]),
+                "w": int(data["width"][i]),
+                "h": int(data["height"][i]),
+            })
+        return results
+    except Exception as tess_err:
+        if "tesseract is not installed" not in str(tess_err).lower() and "tesseractnotfound" not in type(tess_err).__name__.lower():
+            raise
+        logger.warning(
+            "Tesseract not found (%s). Automatically falling back to EasyOCR.", tess_err
+        )
+
+    # EasyOCR fallback when Tesseract binary is absent
+    try:
+        import easyocr
+    except ImportError:
+        raise RuntimeError(
+            "Tesseract is not installed and easyocr is not available. "
+            "Install Tesseract (https://github.com/UB-Mannheim/tesseract/wiki) "
+            "or run: pip install easyocr"
+        )
+
+    reader = easyocr.Reader(["en"], gpu=False, verbose=False)
+    ocr_results = reader.readtext(img_preprocessed)
+    for (bbox, text, conf) in ocr_results:
+        if not text.strip() or conf < 0.3:
             continue
-        conf = int(data["conf"][i])
-        if conf < 0:
-            continue
-        results.append({
-            "text": text,
-            "x": int(data["left"][i]),
-            "y": int(data["top"][i]),
-            "w": int(data["width"][i]),
-            "h": int(data["height"][i]),
-        })
+        xs = [int(p[0]) for p in bbox]
+        ys = [int(p[1]) for p in bbox]
+        x, y = min(xs), min(ys)
+        w, h = max(xs) - x, max(ys) - y
+        results.append({"text": text.strip(), "x": x, "y": y, "w": w, "h": h})
     return results
 
 
