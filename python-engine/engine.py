@@ -89,6 +89,7 @@ class WindAutomateXEngine:
             "watch_popup": self._watch_popup,
             "tick_checkboxes_by_vr": self._tick_checkboxes_by_vr,
             "process_grid_cv": self._process_grid_cv,
+            "vision_row_match": self._vision_row_match,
         }
 
         handler = handlers.get(step_type)
@@ -858,4 +859,86 @@ class WindAutomateXEngine:
         }
 
         result = process_grid_cv(cv_config)
+        return {"success": result.get("success", False), "message": result.get("message", "")}
+
+    def _vision_row_match(self, config: dict) -> dict:
+        """
+        Computer Vision + OCR based row matching and checkbox clicking.
+
+        Reads the on-screen table using pytesseract (with optional EasyOCR
+        fallback), groups OCR words into rows, matches rows against the
+        supplied VR numbers and optional Item Code, clicks the checkbox
+        to the left of each matched row, and auto-scrolls until all rows
+        are processed or the table end is reached.
+
+        Config keys
+        -----------
+        vrNos               (list|str)  – VR numbers to match; comma-separated
+                                          string or JSON array.  Required.
+        itemCode            (str)       – Optional Item Code filter; a row is
+                                          only clicked when *both* the VR number
+                                          and this code appear on the same row.
+        tableRegion         (dict)      – {x, y, width, height} of the table
+                                          region to capture.  Blank = full screen.
+        scrollEnabled       (bool)      – Whether to scroll after each pass.
+                                          Default True.
+        scrollStep          (int)       – Pixels to scroll per step. Default 300.
+        matchMode           (str)       – "exact" or "fuzzy". Default "exact".
+        delayBetweenScroll  (int)       – ms to wait after each scroll. Default 800.
+        scrollX             (int)       – X coordinate for scroll events.
+        scrollY             (int)       – Y coordinate for scroll events.
+        maxScrollAttempts   (int)       – Scroll-attempt cap. Default 20.
+        checkboxOffset      (int)       – Pixels left of row text for checkbox.
+                                          Default 30.
+        clickDelay          (int)       – ms between checkbox clicks. Default 100.
+        rowTolerance        (int)       – Y-centre tolerance for row grouping.
+                                          Default 8.
+        useEasyOcr          (bool)      – Use EasyOCR instead of pytesseract.
+                                          Default False.
+        """
+        from vision_row_selector import run_vision_match
+
+        # vrNos can arrive as a JSON array string or a plain comma-separated string
+        vr_nos_raw = config.get("vrNos", "")
+        if isinstance(vr_nos_raw, str):
+            stripped = vr_nos_raw.strip()
+            if stripped.startswith("["):
+                try:
+                    vr_nos_raw = json.loads(stripped)
+                except json.JSONDecodeError:
+                    pass  # leave as string; run_vision_match handles comma-split
+
+        # tableRegion: accept both dict and "x,y,w,h" string
+        table_region = config.get("tableRegion")
+        if isinstance(table_region, str) and table_region.strip():
+            parts = [p.strip() for p in table_region.split(",")]
+            if len(parts) == 4:
+                try:
+                    table_region = {
+                        "x": int(parts[0]),
+                        "y": int(parts[1]),
+                        "width": int(parts[2]),
+                        "height": int(parts[3]),
+                    }
+                except ValueError:
+                    table_region = None
+
+        vision_config = {
+            "vrNos": vr_nos_raw,
+            "itemCode": str(config.get("itemCode", "")).strip(),
+            "tableRegion": table_region,
+            "scrollEnabled": bool(config.get("scrollEnabled", True)),
+            "scrollStep": int(config.get("scrollStep", 300)),
+            "matchMode": str(config.get("matchMode", "exact")),
+            "delayBetweenScroll": int(config.get("delayBetweenScroll", 800)),
+            "scrollX": int(config.get("scrollX", 0)),
+            "scrollY": int(config.get("scrollY", 0)),
+            "maxScrollAttempts": int(config.get("maxScrollAttempts", 20)),
+            "checkboxOffset": int(config.get("checkboxOffset", 30)),
+            "clickDelay": int(config.get("clickDelay", 100)),
+            "rowTolerance": int(config.get("rowTolerance", 8)),
+            "useEasyOcr": bool(config.get("useEasyOcr", False)),
+        }
+
+        result = run_vision_match(vision_config, engine=self)
         return {"success": result.get("success", False), "message": result.get("message", "")}
