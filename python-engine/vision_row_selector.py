@@ -273,15 +273,14 @@ def _normalise(text: str) -> str:
     return " ".join(text.strip().split()).upper()
 
 
-def _fuzzy_match(a: str, b: str, threshold: float = 0.8) -> bool:
-    """Simple character-level Levenshtein similarity check."""
+def _fuzzy_score(a: str, b: str) -> float:
+    """Return character-level Levenshtein similarity [0.0, 1.0] between a and b."""
     a, b = a.upper(), b.upper()
     if a == b:
-        return True
-    # Levenshtein distance via DP
+        return 1.0
     m, n = len(a), len(b)
     if m == 0 or n == 0:
-        return False
+        return 0.0
     dp = list(range(n + 1))
     for i in range(1, m + 1):
         prev = dp[0]
@@ -294,8 +293,12 @@ def _fuzzy_match(a: str, b: str, threshold: float = 0.8) -> bool:
                 dp[j] = 1 + min(prev, dp[j], dp[j - 1])
             prev = temp
     dist = dp[n]
-    max_len = max(m, n)
-    return (1 - dist / max_len) >= threshold
+    return 1.0 - dist / max(m, n)
+
+
+def _fuzzy_match(a: str, b: str, threshold: float = 0.8) -> bool:
+    """Simple character-level Levenshtein similarity check."""
+    return _fuzzy_score(a, b) >= threshold
 
 
 def match_rows(
@@ -341,6 +344,9 @@ def match_rows(
     normalised_item = _normalise(item_code) if item_code else ""
 
     matches = []
+    # Track VRs already assigned in this scan so that similar VR numbers
+    # (e.g. EZ26Y-011 vs EZ26Y-012) cannot "steal" each other's rows.
+    matched_vrs: set = set()
 
     for row in rows:
         words_text = [_normalise(w["text"]) for w in row["words"]]
@@ -348,17 +354,26 @@ def match_rows(
 
         # Find a matching VR number in this row
         matched_vr: Optional[str] = None
-        for vr, norm_vr in normalised_vrs.items():
-            if match_mode == "fuzzy":
-                # Try fuzzy match on the full row text or any individual word
-                if _fuzzy_match(norm_vr, full_row_text) or any(
-                    _fuzzy_match(norm_vr, w) for w in words_text
-                ):
+        if match_mode == "fuzzy":
+            # For each unmatched VR, compute the best similarity score against
+            # any individual word in the row.  Picking the highest-scoring VR
+            # prevents similar numbers (e.g. EZ26Y-011 vs EZ26Y-012, similarity
+            # ≈ 0.89) from incorrectly matching the wrong row when only the
+            # first-above-threshold VR was taken.
+            best_score: float = -1.0
+            for vr, norm_vr in normalised_vrs.items():
+                if vr in matched_vrs:
+                    continue
+                score = max((_fuzzy_score(norm_vr, w) for w in words_text), default=0.0)
+                if score >= 0.8 and score > best_score:
+                    best_score = score
                     matched_vr = vr
-                    break
-            else:
-                # Exact: look for norm_vr as a substring of any word or the
-                # entire row text — handles cases where OCR merges/splits tokens
+        else:
+            # Exact: look for norm_vr as a substring of any word or the
+            # entire row text — handles cases where OCR merges/splits tokens
+            for vr, norm_vr in normalised_vrs.items():
+                if vr in matched_vrs:
+                    continue
                 if norm_vr in full_row_text or any(norm_vr == w for w in words_text):
                     matched_vr = vr
                     break
@@ -378,6 +393,9 @@ def match_rows(
                 )
             if not item_ok:
                 continue
+
+        # Mark this VR as assigned so it cannot match a second row in this scan.
+        matched_vrs.add(matched_vr)
 
         # Compute checkbox click position
         leftmost_word = min(row["words"], key=lambda w: w["x"])
