@@ -561,7 +561,7 @@ def process_row(
                             "tableRegion": table_region,
                             "scrollEnabled": bool(action.get("scrollEnabled", True)),
                             "scrollStep": int(action.get("scrollStep", 1)),
-                            "matchMode": str(action.get("matchMode", "fuzzy")),
+                            "matchMode": str(action.get("matchMode", "exact")),
                             "delayBetweenScroll": int(action.get("delayBetweenScroll", 800)),
                             "scrollX": int(action.get("scrollX", 0)),
                             "scrollY": int(action.get("scrollY", 0)),
