@@ -765,6 +765,11 @@ class WindAutomateXEngine:
         maxScrollAttempts (int)  – Maximum scroll steps per VR number. Default 20.
         scrollStep        (int)  – Mouse-wheel clicks per scroll. Default 3.
         checkboxOffset    (int)  – Pixels left of VR text for checkbox. Default 40.
+        checkboxYOffset   (int)  – Signed vertical fine-tune (pixels) applied on
+                                   top of the dynamic row-centre Y.  Default 0.
+        debugScreenshots  (bool) – Save annotated PNGs showing click coords.
+                                   Default False.
+        debugDir          (str)  – Directory for debug screenshots. Default "".
         """
         from vr_checkbox_ticker import tick_checkboxes_by_vr
 
@@ -799,6 +804,9 @@ class WindAutomateXEngine:
             vr_col_header=str(config.get("vrColumn", "")).strip(),
             item_code_col_header=str(config.get("itemCodeColumn", "")).strip(),
             row_tolerance=int(config.get("rowTolerance", 12)),
+            checkbox_y_offset=int(config.get("checkboxYOffset", 0)),
+            debug_screenshots=bool(config.get("debugScreenshots", False)),
+            debug_dir=str(config.get("debugDir", "")),
             engine=self,
         )
 

@@ -86,6 +86,9 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
     scrollStep: 3,
     checkboxOffset: 25,
     rowTolerance: 12,
+    checkboxYOffset: 0,
+    debugScreenshots: false,
+    debugDir: '',
     delay: 60,
   },
 };
@@ -1965,6 +1968,8 @@ const TaskBuilder: React.FC = () => {
                   locates each one in a desktop grid window using OCR, and ticks its corresponding checkbox.
                   When an Item Code is provided a row is only ticked when <strong className="text-white">both</strong> the VR number and Item Code appear on the same row.
                   It automatically scrolls the grid to find rows not currently visible.
+                  The checkbox Y position is calculated <strong className="text-white">dynamically</strong> per row using horizontal-line detection, falling back to the OCR bbox centre if grid lines are not detected.
+                  Use <em>Checkbox Y Offset</em> for fine-tuning, and enable <em>debug screenshots</em> to diagnose click coordinates.
                 </p>
 
                 {/* VR Numbers — direct input */}
@@ -2175,7 +2180,8 @@ const TaskBuilder: React.FC = () => {
                     className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    How many pixels to the <strong className="text-gray-400">left</strong> of the detected VR number text to click (where the checkbox column is). Calibrate once for your grid layout.
+                    Fallback: how many pixels to the <strong className="text-gray-400">left</strong> of the detected VR number text to click when automatic checkbox-column detection fails.
+                    Used only when the table's vertical separator lines cannot be detected by OpenCV.
                     The actual pixel distance from the VR text to the checkbox click position is logged after each successful tick.
                   </p>
                 </div>
@@ -2197,6 +2203,68 @@ const TaskBuilder: React.FC = () => {
                   <p className="text-xs text-gray-500 mt-1">
                     Maximum vertical pixel distance between the VR number and the Item Code for them to be considered on the <strong className="text-gray-400">same row</strong>.
                     Increase this for grids with tall or unevenly sized rows. Default: 12.
+                  </p>
+                </div>
+
+                {/* Checkbox Y Offset */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Checkbox Y Offset (pixels) — optional</label>
+                  <input
+                    type="number"
+                    value={String(editingStep.config.checkboxYOffset ?? 0)}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, checkboxYOffset: Number(e.target.value) } } : null
+                      )
+                    }
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Signed vertical fine-tune applied on top of the dynamically detected row-centre Y.
+                    Positive moves the click <strong className="text-gray-400">down</strong>; negative moves it <strong className="text-gray-400">up</strong>.
+                    Leave at <code className="text-gray-400">0</code> (default) and only adjust if clicks still miss after the automatic row-centre detection.
+                  </p>
+                </div>
+
+                {/* Debug Screenshots */}
+                <p className="text-xs font-semibold text-teal-400 uppercase tracking-wider pt-1">Diagnostics</p>
+                <div className="flex items-start gap-3">
+                  <input
+                    id="debugScreenshots"
+                    type="checkbox"
+                    checked={Boolean(editingStep.config.debugScreenshots)}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, debugScreenshots: e.target.checked } } : null
+                      )
+                    }
+                    className="mt-1 accent-teal-500"
+                  />
+                  <label htmlFor="debugScreenshots" className="text-sm text-gray-300 cursor-pointer">
+                    Save debug screenshots
+                    <p className="text-xs text-gray-500 mt-0.5 font-normal">
+                      When enabled, an annotated PNG is saved after each checkbox click attempt, showing the OCR bounding box (green), detected row boundaries (blue), and the final click point (red). Useful for diagnosing wrong coordinates.
+                    </p>
+                  </label>
+                </div>
+
+                {/* Debug Dir */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Debug Screenshot Directory — optional</label>
+                  <input
+                    type="text"
+                    value={String(editingStep.config.debugDir ?? '')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, debugDir: e.target.value } } : null
+                      )
+                    }
+                    placeholder="e.g. C:\debug or /tmp/debug"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-teal-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Folder where debug screenshots are saved. Leave blank to use the current working directory.
+                    Only used when <em>Save debug screenshots</em> is enabled.
                   </p>
                 </div>
               </>
