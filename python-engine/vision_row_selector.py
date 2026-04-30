@@ -661,6 +661,29 @@ def run_vision_match(config: dict, engine=None) -> dict:
             logger.info(f"vision_row_match: detected {len(rows)} row(s) at scroll {scroll_count}")
             print(json.dumps({"event": "vision_match_rows_detected", "count": len(rows), "scroll": scroll_count}), flush=True)
 
+            # --- Log each row's OCR text and checkbox position (debug) ---
+            region_x_dbg = int(table_region.get("x", 0)) if table_region else 0
+            region_y_dbg = int(table_region.get("y", 0)) if table_region else 0
+            for row_idx, row in enumerate(rows):
+                row_text = " ".join(w["text"] for w in row["words"])
+                leftmost = min(row["words"], key=lambda w: w["x"])
+                cb_img_x = max(0, leftmost["x"] - checkbox_offset)
+                cb_img_y = int(row["y_center"])
+                cb_screen_x = region_x_dbg + cb_img_x
+                cb_screen_y = region_y_dbg + cb_img_y
+                logger.debug(
+                    f"vision_row_match: row {row_idx}: text={row_text!r} "
+                    f"checkbox=({cb_screen_x}, {cb_screen_y})"
+                )
+                print(json.dumps({
+                    "event": "vision_match_row_scanned",
+                    "scroll": scroll_count,
+                    "row": row_idx,
+                    "text": row_text,
+                    "checkboxX": cb_screen_x,
+                    "checkboxY": cb_screen_y,
+                }), flush=True)
+
             # --- Match & click ---
             current_vrs_list = list(remaining_vrs)
             matches = match_rows(
