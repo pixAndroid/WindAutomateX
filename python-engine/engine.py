@@ -895,6 +895,10 @@ class WindAutomateXEngine:
                                           Default 8.
         useEasyOcr          (bool)      – Use EasyOCR instead of pytesseract.
                                           Default False.
+        highlightRow        (bool)      – Draw a red rectangle around each matched
+                                          row before clicking. Default True.
+        highlightDuration   (int)       – Duration (ms) to show the highlight.
+                                          Default 800.
         """
         from vision_row_selector import run_vision_match
 
@@ -938,6 +942,8 @@ class WindAutomateXEngine:
             "clickDelay": int(config.get("clickDelay", 100)),
             "rowTolerance": int(config.get("rowTolerance", 8)),
             "useEasyOcr": bool(config.get("useEasyOcr", False)),
+            "highlightRow": bool(config.get("highlightRow", True)),
+            "highlightDuration": int(config.get("highlightDuration", 800)),
         }
 
         result = run_vision_match(vision_config, engine=self)

@@ -355,18 +355,102 @@ def match_rows(
         cb_img_x = max(0, leftmost_word["x"] - checkbox_offset_x)
         cb_img_y = int(row["y_center"])
 
+        # Compute row bounding box (relative to captured image, then offset to screen)
+        row_x_min = min(w["x"] for w in row["words"])
+        row_y_min = min(w["y"] for w in row["words"])
+        row_x_max = max(w["x"] + w["w"] for w in row["words"])
+        row_y_max = max(w["y"] + w["h"] for w in row["words"])
+
         matches.append({
             "vrNo": matched_vr,
             "itemCode": item_code,
             "checkboxX": region_x + cb_img_x,
             "checkboxY": region_y + cb_img_y,
+            "rowX": region_x + row_x_min,
+            "rowY": region_y + row_y_min,
+            "rowWidth": row_x_max - row_x_min,
+            "rowHeight": row_y_max - row_y_min,
         })
 
     return matches
 
 
 # ---------------------------------------------------------------------------
-# Step 7 — Click checkbox
+# Step 7 — Highlight matched row on screen
+# ---------------------------------------------------------------------------
+
+def highlight_row_on_screen(
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+    duration_ms: int = 800,
+    color: str = "red",
+    thickness: int = 3,
+) -> None:
+    """Draw a coloured rectangle border on screen over the matched row.
+
+    Creates a transparent tkinter overlay window whose only visible pixels are
+    the rectangle border, then destroys it after *duration_ms* milliseconds.
+    Failures are silently logged so automation is never blocked by UI errors.
+    """
+    try:
+        import threading
+        import tkinter as tk
+
+        done = threading.Event()
+
+        def _show() -> None:
+            try:
+                pad = thickness + 2
+                win_x = max(0, x - pad)
+                win_y = max(0, y - pad)
+                win_w = width + 2 * pad
+                win_h = height + 2 * pad
+
+                root = tk.Tk()
+                root.overrideredirect(True)
+                root.attributes("-topmost", True)
+                # "black" pixels become transparent — the rectangle outline
+                # (drawn in *color*) stays visible.
+                root.wm_attributes("-transparentcolor", "black")
+                root.geometry(f"{win_w}x{win_h}+{win_x}+{win_y}")
+
+                canvas = tk.Canvas(
+                    root,
+                    width=win_w,
+                    height=win_h,
+                    bg="black",
+                    highlightthickness=0,
+                )
+                canvas.pack()
+                canvas.create_rectangle(
+                    1,
+                    1,
+                    win_w - 2,
+                    win_h - 2,
+                    outline=color,
+                    width=thickness,
+                    fill="black",
+                )
+
+                root.after(duration_ms, root.destroy)
+                root.mainloop()
+            except Exception as exc:
+                logger.debug(f"highlight_row_on_screen._show: {exc}")
+            finally:
+                done.set()
+
+        t = threading.Thread(target=_show, daemon=True)
+        t.start()
+        # Wait for the overlay to close, with a 1-second buffer beyond the display duration
+        done.wait(timeout=(duration_ms + 1000) / 1000.0)
+    except Exception as e:
+        logger.debug(f"highlight_row_on_screen: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Step 8 — Click checkbox
 # ---------------------------------------------------------------------------
 
 def click_checkbox(match: dict, click_delay_ms: int = 100) -> None:
@@ -453,6 +537,9 @@ def run_vision_match(config: dict, engine=None) -> dict:
         clickDelay          (int)       – ms between clicks. Default 100.
         rowTolerance        (int)       – Y-centre tolerance for row grouping. Default 8.
         useEasyOcr          (bool)      – Use EasyOCR instead of pytesseract. Default False.
+        highlightRow        (bool)      – Draw a red rectangle around each matched row
+                                          before clicking. Default True.
+        highlightDuration   (int)       – How long (ms) to show the highlight. Default 800.
     engine:
         Optional engine reference (not used directly but available for extensions).
 
@@ -484,6 +571,8 @@ def run_vision_match(config: dict, engine=None) -> dict:
     click_delay: int = int(config.get("clickDelay", 100))
     row_tolerance: int = int(config.get("rowTolerance", 8))
     use_easyocr: bool = bool(config.get("useEasyOcr", False))
+    highlight_row: bool = bool(config.get("highlightRow", True))
+    highlight_duration: int = int(config.get("highlightDuration", 800))
 
     # If scrollX/Y not provided, default to the centre of the table region
     if scroll_x == 0 and scroll_y == 0 and table_region:
@@ -554,6 +643,15 @@ def run_vision_match(config: dict, engine=None) -> dict:
                     "y": match["checkboxY"],
                 }), flush=True)
                 logger.info(f"Row found: {match['vrNo']} → MATCHED → clicking at ({match['checkboxX']}, {match['checkboxY']})")
+
+                if highlight_row:
+                    highlight_row_on_screen(
+                        x=match["rowX"],
+                        y=match["rowY"],
+                        width=match["rowWidth"],
+                        height=match["rowHeight"],
+                        duration_ms=highlight_duration,
+                    )
 
                 click_checkbox(match, click_delay_ms=click_delay)
 
