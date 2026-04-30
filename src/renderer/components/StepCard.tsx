@@ -31,6 +31,7 @@ const stepIcons: Record<StepType, string> = {
   watch_popup: '👁',
   tick_checkboxes_by_vr: '☑️',
   vision_row_match: '👁️',
+  vision_vr_series_selector: '🔎',
 };
 
 const stepLabels: Record<StepType, string> = {
@@ -63,6 +64,7 @@ const stepLabels: Record<StepType, string> = {
   watch_popup: 'Watch Popup (Realtime)',
   tick_checkboxes_by_vr: 'Tick Checkboxes by VR Nos',
   vision_row_match: 'Vision Row Match & Select (OCR)',
+  vision_vr_series_selector: 'Vision Vr Series Selector',
 };
 
 const clickTypeBadgeMap: Record<string, { label: string; className: string }> = {
