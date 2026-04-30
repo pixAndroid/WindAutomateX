@@ -58,7 +58,15 @@ def capture_table(table_region: Optional[dict]) -> "np.ndarray":  # type: ignore
 # ---------------------------------------------------------------------------
 
 def preprocess_image(img_rgb: "np.ndarray") -> "np.ndarray":  # type: ignore[name-defined]
-    """Convert to grayscale, enhance contrast, and threshold the image."""
+    """Convert to grayscale, enhance contrast, and threshold the image.
+
+    The threshold type is chosen automatically:
+    * Dark-background UIs (mean brightness < 128) → ``THRESH_BINARY_INV``
+      produces black text on white background, which pytesseract requires
+      for accurate bounding-box coordinates.
+    * Light-background UIs (mean brightness ≥ 128) → ``THRESH_BINARY``
+      preserves the existing black-on-white orientation.
+    """
     import cv2
     import numpy as np
 
@@ -69,13 +77,21 @@ def preprocess_image(img_rgb: "np.ndarray") -> "np.ndarray":  # type: ignore[nam
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(gray)
 
+    # Auto-detect background brightness so that the output always has
+    # black text on a white background — the orientation pytesseract
+    # needs for precise word bounding-box positions.
+    mean_brightness = float(enhanced.mean())
+    thresh_type = (
+        cv2.THRESH_BINARY_INV if mean_brightness < 128 else cv2.THRESH_BINARY
+    )
+
     # Adaptive threshold — works better than a fixed threshold for mixed
     # lighting / gradient backgrounds typical in desktop UIs.
     thresh = cv2.adaptiveThreshold(
         enhanced,
         255,
         cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
+        thresh_type,
         blockSize=11,
         C=2,
     )
@@ -182,14 +198,17 @@ def group_rows(words: list, row_tolerance: int = 8) -> list:
     Returns
     -------
     List of row-dicts, each containing ``words`` (sorted by x) and
-    ``y_center`` (average Y centre for the row).
+    ``y_center`` (midpoint of the row's full vertical bounding box).
     """
     if not words:
         return []
 
-    # Compute Y-centre for each word and sort by it
+    # Compute Y-centre for each word and sort by it.
+    # Use exact division (/ 2) rather than floor division (// 2) for the
+    # per-word centre used during grouping so that tightly spaced rows are
+    # not incorrectly merged.
     enriched = sorted(
-        [{"word": w, "yc": w["y"] + w["h"] // 2} for w in words],
+        [{"word": w, "yc": w["y"] + w["h"] / 2} for w in words],
         key=lambda e: e["yc"],
     )
 
@@ -200,23 +219,31 @@ def group_rows(words: list, row_tolerance: int = 8) -> list:
     for entry in enriched:
         if abs(entry["yc"] - current_yc) <= row_tolerance:
             current_row_words.append(entry["word"])
-            # Update running average
-            current_yc = sum(w["y"] + w["h"] // 2 for w in current_row_words) / len(
+            # Update running average used only for grouping decisions
+            current_yc = sum(w["y"] + w["h"] / 2 for w in current_row_words) / len(
                 current_row_words
             )
         else:
             if current_row_words:
+                # Use the midpoint of the row's full bounding box as y_center.
+                # This is more accurate than averaging word centres when words
+                # in the same row have different heights, and maps directly to
+                # the visual centre of the table row cell.
+                row_y_min = min(w["y"] for w in current_row_words)
+                row_y_max = max(w["y"] + w["h"] for w in current_row_words)
                 rows.append({
                     "words": sorted(current_row_words, key=lambda w: w["x"]),
-                    "y_center": current_yc,
+                    "y_center": (row_y_min + row_y_max) / 2,
                 })
             current_row_words = [entry["word"]]
             current_yc = float(entry["yc"])
 
     if current_row_words:
+        row_y_min = min(w["y"] for w in current_row_words)
+        row_y_max = max(w["y"] + w["h"] for w in current_row_words)
         rows.append({
             "words": sorted(current_row_words, key=lambda w: w["x"]),
-            "y_center": current_yc,
+            "y_center": (row_y_min + row_y_max) / 2,
         })
 
     return rows
