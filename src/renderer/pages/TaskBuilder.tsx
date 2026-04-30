@@ -11,6 +11,7 @@ const ACTION_TYPE_COLORS: Record<string, { border: string; label: string }> = {
   type_text:  { border: 'border-green-500',  label: 'text-green-400'  },
   delay:      { border: 'border-orange-500', label: 'text-orange-400' },
   tick_vr:    { border: 'border-teal-500',   label: 'text-teal-400'   },
+  vision_row_match: { border: 'border-cyan-500', label: 'text-cyan-400' },
 };
 
 const ALL_STEP_TYPES: StepType[] = [
@@ -1065,6 +1066,7 @@ const TaskBuilder: React.FC = () => {
                           <option value="type_text">Type Text (Column Value)</option>
                           <option value="delay">Delay</option>
                           <option value="tick_vr">Tick Checkboxes by VR Nos (Excel)</option>
+                          <option value="vision_row_match">Vision Row Match &amp; Select (OCR)</option>
                         </select>
                         <span className={`text-xs flex-1 font-semibold ${ACTION_TYPE_COLORS[action.type]?.label ?? 'text-gray-500'}`}>Action {ai + 1}</span>
                         <button
@@ -1272,6 +1274,104 @@ const TaskBuilder: React.FC = () => {
                             ))}
                           </div>
                         </div>
+                      ) : action.type === 'vision_row_match' ? (
+                        <div className="flex flex-col gap-2">
+                          {/* VR Numbers Column — Pick Column */}
+                          <div className="flex gap-2 items-center">
+                            <label className="text-xs text-gray-400 w-28 shrink-0">VR Numbers Column</label>
+                            <input
+                              type="text"
+                              list={`excel-cols-vrm-action-${ai}`}
+                              value={action.value}
+                              onChange={(e) => {
+                                const submitActions = [...(editingStep.config.submitActions as { type: string; value: string; [key: string]: unknown }[])];
+                                submitActions[ai] = { ...submitActions[ai], value: e.target.value };
+                                setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                              }}
+                              placeholder={excelColumns.length > 0 ? 'Pick column…' : 'Column name'}
+                              className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-cyan-500"
+                            />
+                            {excelColumns.length > 0 && (
+                              <datalist id={`excel-cols-vrm-action-${ai}`}>
+                                {excelColumns.map((col) => <option key={col} value={col} />)}
+                              </datalist>
+                            )}
+                          </div>
+                          {/* Item Code — direct input (as-is) */}
+                          <div className="flex gap-2 items-center">
+                            <label className="text-xs text-gray-400 w-28 shrink-0">Item Code</label>
+                            <input
+                              type="text"
+                              value={String((action as { type: string; value: string; itemCode?: string }).itemCode ?? '')}
+                              onChange={(e) => {
+                                const submitActions = [...(editingStep.config.submitActions as { type: string; value: string; [key: string]: unknown }[])];
+                                submitActions[ai] = { ...submitActions[ai], itemCode: e.target.value };
+                                setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                              }}
+                              placeholder="e.g. MPO010004 (optional)"
+                              className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-cyan-500"
+                            />
+                          </div>
+                          {/* Table Region */}
+                          <div className="flex gap-2 items-center">
+                            <label className="text-xs text-gray-400 w-28 shrink-0">Table Region</label>
+                            <input
+                              type="text"
+                              value={String((action as { type: string; value: string; tableRegion?: string }).tableRegion ?? '')}
+                              onChange={(e) => {
+                                const submitActions = [...(editingStep.config.submitActions as { type: string; value: string; [key: string]: unknown }[])];
+                                submitActions[ai] = { ...submitActions[ai], tableRegion: e.target.value };
+                                setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                              }}
+                              placeholder="x,y,w,h (blank = full screen)"
+                              className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-cyan-500"
+                            />
+                          </div>
+                          {/* Match Mode */}
+                          <div className="flex gap-2 items-center">
+                            <label className="text-xs text-gray-400 w-28 shrink-0">Match Mode</label>
+                            <select
+                              value={String((action as { type: string; value: string; matchMode?: string }).matchMode ?? 'exact')}
+                              onChange={(e) => {
+                                const submitActions = [...(editingStep.config.submitActions as { type: string; value: string; [key: string]: unknown }[])];
+                                submitActions[ai] = { ...submitActions[ai], matchMode: e.target.value };
+                                setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                              }}
+                              className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-cyan-500"
+                            >
+                              <option value="exact">Exact</option>
+                              <option value="fuzzy">Fuzzy (Levenshtein)</option>
+                            </select>
+                          </div>
+                          {/* Scroll & numeric settings */}
+                          <div className="flex gap-2 flex-wrap">
+                            {([
+                              { key: 'scrollX', label: 'Scroll X', placeholder: '0' },
+                              { key: 'scrollY', label: 'Scroll Y', placeholder: '0' },
+                              { key: 'maxScrollAttempts', label: 'Max Scroll', placeholder: '20' },
+                              { key: 'scrollStep', label: 'Scroll Step', placeholder: '1' },
+                              { key: 'checkboxOffset', label: 'CB Offset', placeholder: '30' },
+                              { key: 'rowTolerance', label: 'Row Tolerance', placeholder: '8' },
+                              { key: 'clickDelay', label: 'Click Delay', placeholder: '100' },
+                              { key: 'delayBetweenScroll', label: 'Scroll Delay', placeholder: '800' },
+                            ] as { key: string; label: string; placeholder: string }[]).map(({ key, label, placeholder }) => (
+                              <div key={key} className="flex flex-col gap-0.5">
+                                <label className="text-xs text-gray-500">{label}</label>
+                                <input
+                                  type="number"
+                                  value={String((action as Record<string, unknown>)[key] ?? '')}
+                                  onChange={(e) => {
+                                    const submitActions = [...(editingStep.config.submitActions as { type: string; value: string; [key: string]: unknown }[])];
+                                    submitActions[ai] = { ...submitActions[ai], [key]: e.target.value === '' ? '' : Number(e.target.value) };
+                                    setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                                  }}
+                                  placeholder={placeholder}
+                                  className="w-20 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-cyan-500"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       ) : (
                         <div className="flex gap-2 items-center">
                           <input
@@ -1337,7 +1437,7 @@ const TaskBuilder: React.FC = () => {
                     + Add Submit Action
                   </button>
                   <p className="text-xs text-gray-500">
-                    Add coordinate clicks, keyboard shortcuts, "Type Text (Column Value)", "Delay", or "Tick Checkboxes by VR Nos (Excel)" actions to execute when submitting each row.
+                    Add coordinate clicks, keyboard shortcuts, "Type Text (Column Value)", "Delay", "Tick Checkboxes by VR Nos (Excel)", or "Vision Row Match &amp; Select (OCR)" actions to execute when submitting each row.
                   </p>
                 </div>
                 <div className="flex gap-3">
