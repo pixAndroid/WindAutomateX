@@ -226,7 +226,9 @@ def _detect_checkbox_column_x(screenshot_rgb) -> Optional[int]:
             groups.append(current_group)
 
             if len(groups) >= 2:
-                mid = (int(sum(groups[0]) / len(groups[0])) + int(sum(groups[1]) / len(groups[1]))) // 2
+                centre0 = int(sum(groups[0]) / len(groups[0]))
+                centre1 = int(sum(groups[1]) / len(groups[1]))
+                mid = (centre0 + centre1) // 2
                 return mid
     except Exception as e:
         logger.debug(f"_detect_checkbox_column_x: {e}")
@@ -485,8 +487,8 @@ def run_vision_match(config: dict, engine=None) -> dict:
 
     # If scrollX/Y not provided, default to the centre of the table region
     if scroll_x == 0 and scroll_y == 0 and table_region:
-        scroll_x = int(table_region.get("x", 0)) + int(table_region.get("width", 0)) // 2
-        scroll_y = int(table_region.get("y", 0)) + int(table_region.get("height", 0)) // 2
+        scroll_x = (int(table_region.get("x", 0)) + int(table_region.get("width", 0))) // 2
+        scroll_y = (int(table_region.get("y", 0)) + int(table_region.get("height", 0))) // 2
 
     remaining_vrs = set(vr_nos)
     processed_keys: set = set()  # vrNo_itemCode strings already clicked
