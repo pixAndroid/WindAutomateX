@@ -516,6 +516,70 @@ def process_row(
                             row_index + 1,
                             value,
                         )
+                elif action_type == "vision_row_match":
+                    # value is the Excel column name containing comma-separated VR numbers.
+                    # Scan the on-screen table with OCR, match each VR number (plus optional
+                    # Item Code), click its checkbox, and auto-scroll until all are found or
+                    # the table ends.
+                    from vision_row_selector import run_vision_match
+                    vr_list_str = str(row.get(value, "")).strip() if value else ""
+                    # itemCode may be a direct value or an Excel column name — try column
+                    # lookup first, fall back to the raw string.
+                    item_code_raw = str(action.get("itemCode", "")).strip()
+                    item_code = str(row.get(item_code_raw, item_code_raw)).strip() if item_code_raw else ""
+                    if not vr_list_str:
+                        logger.warning(
+                            "Row %d: vision_row_match action: column '%s' is empty or not found",
+                            row_index + 1,
+                            value,
+                        )
+                    else:
+                        # Parse table region: accept "x,y,w,h" string or dict
+                        table_region_raw = action.get("tableRegion", "")
+                        table_region = None
+                        if isinstance(table_region_raw, dict):
+                            table_region = table_region_raw
+                        elif isinstance(table_region_raw, str) and table_region_raw.strip():
+                            parts = [p.strip() for p in table_region_raw.split(",")]
+                            if len(parts) == 4:
+                                try:
+                                    table_region = {
+                                        "x": int(parts[0]),
+                                        "y": int(parts[1]),
+                                        "width": int(parts[2]),
+                                        "height": int(parts[3]),
+                                    }
+                                except ValueError:
+                                    logger.warning(
+                                        "Row %d: vision_row_match action: invalid tableRegion '%s' — using full screen",
+                                        row_index + 1,
+                                        table_region_raw,
+                                    )
+                        vision_config = {
+                            "vrNos": vr_list_str,
+                            "itemCode": item_code,
+                            "tableRegion": table_region,
+                            "scrollEnabled": bool(action.get("scrollEnabled", True)),
+                            "scrollStep": int(action.get("scrollStep", 1)),
+                            "matchMode": str(action.get("matchMode", "fuzzy")),
+                            "delayBetweenScroll": int(action.get("delayBetweenScroll", 800)),
+                            "scrollX": int(action.get("scrollX", 0)),
+                            "scrollY": int(action.get("scrollY", 0)),
+                            "maxScrollAttempts": int(action.get("maxScrollAttempts", 20)),
+                            "checkboxOffset": int(action.get("checkboxOffset", 30)),
+                            "clickDelay": int(action.get("clickDelay", 100)),
+                            "rowTolerance": int(action.get("rowTolerance", 8)),
+                            "useEasyOcr": bool(action.get("useEasyOcr", False)),
+                            "highlightRow": bool(action.get("highlightRow", True)),
+                            "highlightDuration": int(action.get("highlightDuration", 800)),
+                        }
+                        vision_result = run_vision_match(vision_config, engine=engine)
+                        if not vision_result.get("success", False):
+                            logger.warning(
+                                "Row %d: vision_row_match action partial result: %s",
+                                row_index + 1,
+                                vision_result.get("message", ""),
+                            )
         elif submit_selector:
             # Backward-compatible: old single submitSelector
             click_submit(submit_selector, engine)
