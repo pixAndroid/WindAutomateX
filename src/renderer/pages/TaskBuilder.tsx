@@ -96,7 +96,7 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
     itemCode: '',
     tableRegion: '',
     scrollEnabled: true,
-    scrollStep: 300,
+    scrollStep: 1,
     matchMode: 'exact',
     delayBetweenScroll: 800,
     scrollX: 0,
@@ -2420,11 +2420,11 @@ const TaskBuilder: React.FC = () => {
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Scroll Step (pixels)</label>
+                    <label className="block text-xs text-gray-400 mb-1">Page Downs per Scroll</label>
                     <input
                       type="number"
                       min={1}
-                      value={String(editingStep.config.scrollStep ?? 300)}
+                      value={String(editingStep.config.scrollStep ?? 1)}
                       onChange={(e) =>
                         setEditingStep((prev) =>
                           prev ? { ...prev, config: { ...prev.config, scrollStep: Number(e.target.value) } } : null
@@ -2489,7 +2489,7 @@ const TaskBuilder: React.FC = () => {
                   </div>
                 </div>
                 <p className="text-xs text-gray-500">
-                  Scroll X/Y: screen coordinate where scroll events are sent. Leave at 0,0 to auto-centre on the table region.
+                  Scroll X/Y: screen coordinate clicked to give the table keyboard focus before pressing Page Down. Leave at 0,0 to auto-centre on the table region.
                 </p>
 
                 {/* Click & OCR Settings */}

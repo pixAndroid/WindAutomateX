@@ -882,7 +882,8 @@ class WindAutomateXEngine:
                                           region to capture.  Blank = full screen.
         scrollEnabled       (bool)      – Whether to scroll after each pass.
                                           Default True.
-        scrollStep          (int)       – Pixels to scroll per step. Default 300.
+        scrollStep          (int)       – Number of Page Down key presses per
+                                          scroll step. Default 1.
         matchMode           (str)       – "exact" or "fuzzy". Default "exact".
         delayBetweenScroll  (int)       – ms to wait after each scroll. Default 800.
         scrollX             (int)       – X coordinate for scroll events.
@@ -932,7 +933,7 @@ class WindAutomateXEngine:
             "itemCode": str(config.get("itemCode", "")).strip(),
             "tableRegion": table_region,
             "scrollEnabled": bool(config.get("scrollEnabled", True)),
-            "scrollStep": int(config.get("scrollStep", 300)),
+            "scrollStep": int(config.get("scrollStep", 1)),
             "matchMode": str(config.get("matchMode", "exact")),
             "delayBetweenScroll": int(config.get("delayBetweenScroll", 800)),
             "scrollX": int(config.get("scrollX", 0)),
