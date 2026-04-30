@@ -74,7 +74,10 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
     delay: 60,
   },
   tick_checkboxes_by_vr: {
+    vrNumbers: '',
     vrColumn: '',
+    itemCode: '',
+    itemCodeColumn: '',
     windowTitle: '',
     gridRoi: '',
     scrollX: 0,
@@ -82,6 +85,7 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
     maxScrollAttempts: 20,
     scrollStep: 3,
     checkboxOffset: 25,
+    rowTolerance: 12,
     delay: 60,
   },
 };
@@ -1228,6 +1232,7 @@ const TaskBuilder: React.FC = () => {
                               { key: 'maxScrollAttempts', label: 'Max Scroll', placeholder: '20' },
                               { key: 'scrollStep', label: 'Scroll Step', placeholder: '3' },
                               { key: 'checkboxOffset', label: 'CB Offset', placeholder: '40' },
+                              { key: 'rowTolerance', label: 'Row Tolerance', placeholder: '12' },
                             ] as { key: string; label: string; placeholder: string }[]).map(({ key, label, placeholder }) => (
                               <div key={key} className="flex flex-col gap-0.5">
                                 <label className="text-xs text-gray-500">{label}</label>
@@ -1956,14 +1961,57 @@ const TaskBuilder: React.FC = () => {
             ) : editingStep.step.step_type === 'tick_checkboxes_by_vr' ? (
               <>
                 <p className="text-xs text-gray-400 bg-gray-750 border border-teal-700 rounded-lg px-3 py-2">
-                  ☑️ <strong className="text-white">Tick Checkboxes by VR Nos</strong> reads a comma-separated list of VR numbers
-                  from an Excel column and ticks the matching checkbox in a desktop grid window.
-                  It automatically scrolls the grid to find VR numbers not currently visible.
+                  ☑️ <strong className="text-white">Tick Checkboxes by VR Nos</strong> reads a comma-separated list of VR numbers,
+                  locates each one in a desktop grid window using OCR, and ticks its corresponding checkbox.
+                  When an Item Code is provided a row is only ticked when <strong className="text-white">both</strong> the VR number and Item Code appear on the same row.
+                  It automatically scrolls the grid to find rows not currently visible.
                 </p>
 
-                {/* VR Column */}
+                {/* VR Numbers — direct input */}
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">VR Numbers Column (Excel)</label>
+                  <label className="block text-sm text-gray-400 mb-1">VR Numbers (direct input)</label>
+                  <input
+                    type="text"
+                    value={String(editingStep.config.vrNumbers ?? '')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, vrNumbers: e.target.value } } : null
+                      )
+                    }
+                    placeholder='e.g. EZ26Y-053, EZ26Y-054'
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Comma-separated VR numbers to tick (e.g. <code className="text-gray-400">EZ26Y-053, EZ26Y-054</code>).
+                    Takes precedence over <em>VR Numbers Column</em> and the <code className="text-gray-400">vr_numbers</code> engine variable.
+                    Leave blank when numbers come from an Excel loop column or an engine variable.
+                  </p>
+                </div>
+
+                {/* Item Code — direct input */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Item Code (direct input) — optional</label>
+                  <input
+                    type="text"
+                    value={String(editingStep.config.itemCode ?? '')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, itemCode: e.target.value } } : null
+                      )
+                    }
+                    placeholder='e.g. MPO010004'
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    When set, only rows where <strong className="text-gray-400">both</strong> the VR number and this Item Code appear are ticked.
+                    Takes precedence over <em>Item Code Column</em> and the <code className="text-gray-400">item_code</code> engine variable.
+                    Leave blank to match by VR number alone.
+                  </p>
+                </div>
+
+                {/* VR Column (on-screen header) */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">VR Column Header (on-screen)</label>
                   <input
                     type="text"
                     list="excel-cols-vr"
@@ -1973,7 +2021,7 @@ const TaskBuilder: React.FC = () => {
                         prev ? { ...prev, config: { ...prev.config, vrColumn: e.target.value } } : null
                       )
                     }
-                    placeholder="e.g. VR_Numbers"
+                    placeholder="e.g. DI No"
                     className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500"
                   />
                   {excelColumns.length > 0 && (
@@ -1982,16 +2030,14 @@ const TaskBuilder: React.FC = () => {
                     </datalist>
                   )}
                   <p className="text-xs text-gray-500 mt-1">
-                    Name of the Excel column containing VR numbers separated by commas (e.g. <code className="text-gray-400">EZ25Y-042, EZ25Y-047</code>).
-                    Used when this step runs inside an Excel Form Submit Loop.
-                    Leave blank to pass VR numbers from an engine variable named <code className="text-gray-400">vr_numbers</code>.{' '}
-                    <strong className="text-gray-400">Also used as the on-screen grid column header</strong> so OCR matching is restricted to that column only (column-aware precision).
+                    The column header as it appears <strong className="text-gray-400">on-screen</strong> in the grid (e.g. <code className="text-gray-400">DI No</code>).
+                    When set, OCR matching is restricted to that column only, preventing false positives in other columns.
                   </p>
                 </div>
 
-                {/* Item Code Column */}
+                {/* Item Code Column (on-screen header) */}
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Item Code Column (Excel) — optional</label>
+                  <label className="block text-sm text-gray-400 mb-1">Item Code Column Header (on-screen) — optional</label>
                   <input
                     type="text"
                     list="excel-cols-item-code"
@@ -2001,7 +2047,7 @@ const TaskBuilder: React.FC = () => {
                         prev ? { ...prev, config: { ...prev.config, itemCodeColumn: e.target.value } } : null
                       )
                     }
-                    placeholder="e.g. Item_Code"
+                    placeholder="e.g. Item Code"
                     className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500"
                   />
                   {excelColumns.length > 0 && (
@@ -2010,9 +2056,8 @@ const TaskBuilder: React.FC = () => {
                     </datalist>
                   )}
                   <p className="text-xs text-gray-500 mt-1">
-                    When set, a grid row is only ticked when <strong className="text-gray-400">both</strong> the VR number and this Item Code appear on the same row.
-                    Leave blank to match by VR number alone; the engine will also check for a variable named <code className="text-gray-400">item_code</code> if one is set.{' '}
-                    <strong className="text-gray-400">Also used as the on-screen grid column header</strong> to constrain OCR matching to the Item Code column only.
+                    The Item Code column header as it appears <strong className="text-gray-400">on-screen</strong> in the grid (e.g. <code className="text-gray-400">Item Code</code>).
+                    When set, OCR matching for the item code is restricted to that column only.
                   </p>
                 </div>
 
@@ -2132,6 +2177,26 @@ const TaskBuilder: React.FC = () => {
                   <p className="text-xs text-gray-500 mt-1">
                     How many pixels to the <strong className="text-gray-400">left</strong> of the detected VR number text to click (where the checkbox column is). Calibrate once for your grid layout.
                     The actual pixel distance from the VR text to the checkbox click position is logged after each successful tick.
+                  </p>
+                </div>
+
+                {/* Row Tolerance */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Row Tolerance (pixels)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={String(editingStep.config.rowTolerance ?? 12)}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, rowTolerance: Number(e.target.value) } } : null
+                      )
+                    }
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maximum vertical pixel distance between the VR number and the Item Code for them to be considered on the <strong className="text-gray-400">same row</strong>.
+                    Increase this for grids with tall or unevenly sized rows. Default: 12.
                   </p>
                 </div>
               </>
