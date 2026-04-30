@@ -643,6 +643,72 @@ def _ocr_find_text_with_item_code(
 
 
 # ---------------------------------------------------------------------------
+# Checkbox highlight overlay
+# ---------------------------------------------------------------------------
+
+def _highlight_checkbox_on_screen(
+    screen_x: int,
+    screen_y: int,
+    size: int = 18,
+    duration_ms: int = 800,
+) -> None:
+    """Draw a small cyan rectangle centred on the checkbox click point.
+
+    Uses a transparent tkinter overlay so automation is never blocked by
+    UI errors.  Runs in a daemon thread and blocks for at most
+    *duration_ms* + 1 second.
+    """
+    try:
+        import threading
+        import tkinter as tk
+
+        done = threading.Event()
+
+        def _show() -> None:
+            try:
+                half = size // 2 + 3
+                win_x = max(0, screen_x - half)
+                win_y = max(0, screen_y - half)
+                win_w = 2 * half
+                win_h = 2 * half
+
+                root = tk.Tk()
+                root.overrideredirect(True)
+                root.attributes("-topmost", True)
+                root.wm_attributes("-transparentcolor", "black")
+                root.geometry(f"{win_w}x{win_h}+{win_x}+{win_y}")
+
+                canvas = tk.Canvas(
+                    root,
+                    width=win_w,
+                    height=win_h,
+                    bg="black",
+                    highlightthickness=0,
+                )
+                canvas.pack()
+                # Cyan rectangle centred in the window
+                canvas.create_rectangle(
+                    2, 2, win_w - 2, win_h - 2,
+                    outline="cyan",
+                    width=2,
+                    fill="black",
+                )
+
+                root.after(duration_ms, root.destroy)
+                root.mainloop()
+            except Exception as exc:
+                logger.debug("_highlight_checkbox_on_screen._show: %s", exc)
+            finally:
+                done.set()
+
+        t = threading.Thread(target=_show, daemon=True)
+        t.start()
+        done.wait(timeout=(duration_ms + 1000) / 1000.0)
+    except Exception as exc:
+        logger.debug("_highlight_checkbox_on_screen: %s", exc)
+
+
+# ---------------------------------------------------------------------------
 # Window activation
 # ---------------------------------------------------------------------------
 
@@ -980,6 +1046,7 @@ def tick_checkboxes_by_vr(
                     )
 
                 try:
+                    _highlight_checkbox_on_screen(screen_x, screen_y)
                     pyautogui.click(screen_x, screen_y)
                     time.sleep(0.15)
                     checked.append(vr_number)
@@ -995,8 +1062,10 @@ def tick_checkboxes_by_vr(
             if attempt < max_scroll_attempts:
                 try:
                     if eff_scroll_x > 0 or eff_scroll_y > 0:
-                        pyautogui.moveTo(eff_scroll_x, eff_scroll_y, duration=0.1)
-                    pyautogui.scroll(-scroll_step)
+                        pyautogui.click(eff_scroll_x, eff_scroll_y)
+                        time.sleep(0.05)
+                    for _ in range(max(1, scroll_step)):
+                        pyautogui.press("pagedown")
                     time.sleep(0.3)
                 except Exception as exc:
                     msg = f"{vr_number}: scroll failed — {exc}"

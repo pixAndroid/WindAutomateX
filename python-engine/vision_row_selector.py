@@ -387,11 +387,18 @@ def highlight_row_on_screen(
     duration_ms: int = 800,
     color: str = "red",
     thickness: int = 3,
+    checkbox_pos: Optional[tuple] = None,
+    checkbox_size: int = 18,
 ) -> None:
     """Draw a coloured rectangle border on screen over the matched row.
 
+    When *checkbox_pos* ``(screen_x, screen_y)`` is provided a second small
+    rectangle of *checkbox_size* × *checkbox_size* pixels is drawn centred on
+    that point (using a cyan border) in the same overlay window so both
+    highlights appear at the same time without extra blocking calls.
+
     Creates a transparent tkinter overlay window whose only visible pixels are
-    the rectangle border, then destroys it after *duration_ms* milliseconds.
+    the rectangle borders, then destroys it after *duration_ms* milliseconds.
     Failures are silently logged so automation is never blocked by UI errors.
     """
     try:
@@ -402,17 +409,37 @@ def highlight_row_on_screen(
 
         def _show() -> None:
             try:
+                # Compute the bounding box that must contain *both* the row
+                # rectangle and, when present, the checkbox rectangle so a
+                # single window covers everything.
                 pad = thickness + 2
-                win_x = max(0, x - pad)
-                win_y = max(0, y - pad)
-                win_w = width + 2 * pad
-                win_h = height + 2 * pad
+                all_left   = x - pad
+                all_top    = y - pad
+                all_right  = x + width + pad
+                all_bottom = y + height + pad
+
+                if checkbox_pos is not None:
+                    cb_x, cb_y = int(checkbox_pos[0]), int(checkbox_pos[1])
+                    half = checkbox_size // 2 + thickness + 2
+                    all_left   = min(all_left,   cb_x - half)
+                    all_top    = min(all_top,    cb_y - half)
+                    all_right  = max(all_right,  cb_x + half)
+                    all_bottom = max(all_bottom, cb_y + half)
+
+                win_x = max(0, all_left)
+                win_y = max(0, all_top)
+                win_w = all_right - all_left
+                win_h = all_bottom - all_top
+
+                # Helper: convert screen coordinates to canvas-local coordinates.
+                def _to_canvas(sx: int, sy: int) -> tuple:
+                    return sx - win_x, sy - win_y
 
                 root = tk.Tk()
                 root.overrideredirect(True)
                 root.attributes("-topmost", True)
-                # "black" pixels become transparent — the rectangle outline
-                # (drawn in *color*) stays visible.
+                # "black" pixels become transparent — the rectangle outlines
+                # (drawn in *color*) stay visible.
                 root.wm_attributes("-transparentcolor", "black")
                 root.geometry(f"{win_w}x{win_h}+{win_x}+{win_y}")
 
@@ -424,15 +451,29 @@ def highlight_row_on_screen(
                     highlightthickness=0,
                 )
                 canvas.pack()
+
+                # Row rectangle (red by default)
+                rx1, ry1 = _to_canvas(x - pad, y - pad)
+                rx2, ry2 = _to_canvas(x + width + pad, y + height + pad)
                 canvas.create_rectangle(
-                    1,
-                    1,
-                    win_w - 2,
-                    win_h - 2,
+                    rx1, ry1, rx2, ry2,
                     outline=color,
                     width=thickness,
                     fill="black",
                 )
+
+                # Checkbox rectangle (cyan), drawn on the same overlay
+                if checkbox_pos is not None:
+                    cb_x, cb_y = int(checkbox_pos[0]), int(checkbox_pos[1])
+                    half = checkbox_size // 2
+                    cx1, cy1 = _to_canvas(cb_x - half, cb_y - half)
+                    cx2, cy2 = _to_canvas(cb_x + half, cb_y + half)
+                    canvas.create_rectangle(
+                        cx1, cy1, cx2, cy2,
+                        outline="cyan",
+                        width=2,
+                        fill="black",
+                    )
 
                 root.after(duration_ms, root.destroy)
                 root.mainloop()
@@ -471,20 +512,25 @@ def click_checkbox(match: dict, click_delay_ms: int = 100) -> None:
 def scroll_table(
     scroll_x: int,
     scroll_y: int,
-    scroll_step: int = 300,
+    scroll_step: int = 1,
     delay_ms: int = 800,
 ) -> None:
-    """Scroll the table down by *scroll_step* pixels and wait *delay_ms* ms."""
+    """Press the Page Down key *scroll_step* times to scroll the table down.
+
+    The mouse is first moved to (scroll_x, scroll_y) and clicked so the
+    target widget receives keyboard focus before the key presses are sent.
+    """
     import pyautogui
 
-    # Move mouse to the scroll position first (important for some applications)
+    # Give the target widget keyboard focus by clicking inside the table region
     if scroll_x > 0 or scroll_y > 0:
-        pyautogui.moveTo(scroll_x, scroll_y)
+        pyautogui.click(scroll_x, scroll_y)
+        time.sleep(0.05)
 
-    # pyautogui.scroll uses wheel clicks (positive = up, negative = down).
-    # Convert pixel step to approximate wheel clicks (1 click ≈ 120 px).
-    wheel_clicks = max(1, scroll_step // 120)
-    pyautogui.scroll(-wheel_clicks)
+    presses = max(1, scroll_step)
+    for _ in range(presses):
+        pyautogui.press("pagedown")
+
     if delay_ms > 0:
         time.sleep(delay_ms / 1000.0)
 
@@ -527,7 +573,8 @@ def run_vision_match(config: dict, engine=None) -> dict:
         itemCode            (str)       – Item Code to also match (optional).
         tableRegion         (dict)      – {x, y, width, height} of table area.
         scrollEnabled       (bool)      – Whether to scroll. Default True.
-        scrollStep          (int)       – Pixels per scroll. Default 300.
+        scrollStep          (int)       – Number of Page Down key presses per
+                                          scroll. Default 1.
         matchMode           (str)       – "exact" or "fuzzy". Default "exact".
         delayBetweenScroll  (int)       – ms between scrolls. Default 800.
         scrollX             (int)       – X coordinate for scroll events.
@@ -561,7 +608,7 @@ def run_vision_match(config: dict, engine=None) -> dict:
     item_code: str = str(config.get("itemCode", "")).strip()
     table_region: Optional[dict] = config.get("tableRegion")
     scroll_enabled: bool = bool(config.get("scrollEnabled", True))
-    scroll_step: int = int(config.get("scrollStep", 300))
+    scroll_step: int = int(config.get("scrollStep", 1))
     match_mode: str = str(config.get("matchMode", "exact"))
     delay_between_scroll: int = int(config.get("delayBetweenScroll", 800))
     scroll_x: int = int(config.get("scrollX", 0))
@@ -651,6 +698,7 @@ def run_vision_match(config: dict, engine=None) -> dict:
                         width=match["rowWidth"],
                         height=match["rowHeight"],
                         duration_ms=highlight_duration,
+                        checkbox_pos=(match["checkboxX"], match["checkboxY"]),
                     )
 
                 click_checkbox(match, click_delay_ms=click_delay)
