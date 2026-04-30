@@ -159,6 +159,187 @@ def _detect_checkbox_column_x(screenshot) -> Optional[int]:
     return cb_x
 
 
+def _detect_row_bounds(
+    screenshot,
+    approx_y: int,
+    row_search_margin: int = 80,
+) -> Optional[tuple[int, int]]:
+    """
+    Detect the top and bottom Y coordinates of the grid row that contains
+    *approx_y*, using horizontal-line detection (OpenCV morphology).
+
+    Algorithm
+    ---------
+    1. Restrict analysis to a vertical band ``[approx_y - margin, approx_y + margin]``
+       for speed and to avoid picking up unrelated horizontal lines elsewhere.
+    2. Convert the band to binary with adaptive thresholding.
+    3. Apply a wide horizontal structuring element so that only long row-spanning
+       lines survive the morphological opening.
+    4. Reduce to a 1-D projection and group adjacent "hot" pixels into line centres.
+    5. Return the nearest line above and the nearest line below *approx_y* as the
+       row's top/bottom boundaries.
+
+    Parameters
+    ----------
+    screenshot : numpy.ndarray
+        Current screenshot (RGB or grayscale), image-relative.
+    approx_y : int
+        Approximate Y centre from OCR (image-relative).
+    row_search_margin : int
+        Vertical pixels above and below *approx_y* to include in the search band.
+
+    Returns
+    -------
+    (top_y, bottom_y) – image-relative row boundary Y values, or ``None`` when
+    row separators could not be reliably detected.
+    """
+    import cv2
+    import numpy as np
+
+    gray = cv2.cvtColor(screenshot, cv2.COLOR_RGB2GRAY) if screenshot.ndim == 3 else screenshot
+    img_h, img_w = gray.shape
+
+    y_lo = max(0, approx_y - row_search_margin)
+    y_hi = min(img_h, approx_y + row_search_margin)
+    band = gray[y_lo:y_hi]
+
+    binary = cv2.adaptiveThreshold(
+        band, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV,
+        blockSize=15, C=4,
+    )
+
+    # Wide horizontal kernel – only lines spanning ≥20 % of image width survive
+    h_kernel_w = max(img_w // 5, 40)
+    h_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (h_kernel_w, 1))
+    h_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, h_kernel)
+
+    h_proj = np.sum(h_lines, axis=1).astype(np.float32)
+    min_pixels = img_w * 0.15 * 255
+    raw_ys = [y for y in range(h_proj.shape[0]) if h_proj[y] >= min_pixels]
+
+    if not raw_ys:
+        logger.debug(
+            "_detect_row_bounds: no horizontal lines found near approx_y=%d", approx_y
+        )
+        return None
+
+    # Group adjacent pixels → line centres; translate back to image coordinates
+    groups: list[int] = []
+    current: list[int] = [raw_ys[0]]
+    for y in raw_ys[1:]:
+        if y - current[-1] <= 4:
+            current.append(y)
+        else:
+            groups.append(int(round(sum(current) / len(current))) + y_lo)
+            current = [y]
+    groups.append(int(round(sum(current) / len(current))) + y_lo)
+
+    logger.debug(
+        "_detect_row_bounds: detected %d horizontal line(s) near approx_y=%d: %s",
+        len(groups), approx_y, groups,
+    )
+
+    above = [g for g in groups if g <= approx_y]
+    below = [g for g in groups if g > approx_y]
+
+    if above and below:
+        return (above[-1], below[0])
+
+    # Only lines on one side – estimate the missing boundary from row height
+    if above and len(above) >= 2:
+        row_h = above[-1] - above[-2]
+        return (above[-1], min(img_h - 1, above[-1] + row_h))
+    if below and len(below) >= 2:
+        row_h = below[1] - below[0]
+        return (max(0, below[0] - row_h), below[0])
+
+    # Single line detected – can't determine which side of the row we're on
+    return None
+
+
+def _save_debug_screenshot(
+    screenshot,
+    vr_number: str,
+    vr_bbox: tuple[int, int, int, int],
+    click_xy: tuple[int, int],
+    row_bounds: Optional[tuple[int, int]],
+    roi: Optional[tuple[int, int, int, int]],
+    debug_dir: str = "",
+) -> None:
+    """
+    Save an annotated screenshot for checkbox-click debugging.
+
+    Annotations
+    -----------
+    - Green rectangle : OCR bounding box for the VR text
+    - Blue horizontal lines : detected row boundaries (when available)
+    - Red cross + circle : the final checkbox click point (image-relative)
+
+    Parameters
+    ----------
+    screenshot : numpy.ndarray
+        ROI-relative screenshot (RGB).
+    vr_number : str
+        VR number label (used in the output filename).
+    vr_bbox : (x, y, w, h)
+        Image-relative OCR bounding box for the VR text.
+    click_xy : (screen_x, screen_y)
+        Absolute screen click coordinates.
+    row_bounds : (top_y, bottom_y) | None
+        Image-relative row boundary Y values from :func:`_detect_row_bounds`.
+    roi : (rx, ry, rw, rh) | None
+        Screen ROI used for the capture (needed to translate screen coords back
+        to image coords for drawing).
+    debug_dir : str
+        Directory where debug images are saved.  Defaults to the current
+        working directory when empty.
+    """
+    import os
+    import cv2
+
+    try:
+        img = cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR) if screenshot.ndim == 3 else \
+              cv2.cvtColor(screenshot, cv2.COLOR_GRAY2BGR)
+
+        # Green rectangle: OCR VR text bounding box
+        bx, by, bw, bh = vr_bbox
+        cv2.rectangle(img, (bx, by), (bx + bw, by + bh), (0, 200, 0), 2)
+        cv2.putText(img, "VR text", (bx, max(by - 4, 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 200, 0), 1)
+
+        # Blue lines: detected row boundaries
+        if row_bounds is not None:
+            top_y, bottom_y = row_bounds
+            cv2.line(img, (0, top_y), (img.shape[1], top_y), (200, 130, 0), 1)
+            cv2.line(img, (0, bottom_y), (img.shape[1], bottom_y), (200, 130, 0), 1)
+            mid_y = (top_y + bottom_y) // 2
+            cv2.line(img, (0, mid_y), (img.shape[1], mid_y), (200, 200, 0), 1)
+
+        # Red cross + circle: checkbox click point (image-relative)
+        roi_x = roi[0] if roi else 0
+        roi_y = roi[1] if roi else 0
+        cx = click_xy[0] - roi_x
+        cy = click_xy[1] - roi_y
+        if 0 <= cx < img.shape[1] and 0 <= cy < img.shape[0]:
+            cv2.circle(img, (cx, cy), 7, (0, 0, 220), 2)
+            cv2.drawMarker(img, (cx, cy), (0, 0, 220), cv2.MARKER_CROSS, 12, 2)
+            cv2.putText(
+                img, f"click ({click_xy[0]},{click_xy[1]})",
+                (max(cx - 40, 0), max(cy - 10, 10)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 220), 1,
+            )
+
+        safe_vr = vr_number.replace("/", "_").replace("\\", "_").replace(":", "_")
+        ts = int(time.time() * 1000)
+        filename = os.path.join(debug_dir or ".", f"debug_cb_{safe_vr}_{ts}.png")
+        cv2.imwrite(filename, img)
+        logger.info("_save_debug_screenshot: saved %s", filename)
+    except Exception as exc:
+        logger.warning("_save_debug_screenshot: failed — %s", exc)
+
+
 # ---------------------------------------------------------------------------
 # OCR helpers
 # ---------------------------------------------------------------------------
@@ -521,6 +702,9 @@ def tick_checkboxes_by_vr(
     vr_col_header: str = "",
     item_code_col_header: str = "",
     row_tolerance: int = 12,
+    checkbox_y_offset: int = 0,
+    debug_screenshots: bool = False,
+    debug_dir: str = "",
     engine=None,
 ) -> dict:
     """
@@ -547,6 +731,8 @@ def tick_checkboxes_by_vr(
         Horizontal pixels to the **left** of the detected VR text where the
         checkbox column lives.  The actual click position and distance from
         the VR text are both logged and included in the returned dict.
+        Only used when the checkbox column cannot be detected via table-structure
+        analysis.
     item_code : str
         When provided, a VR number is only ticked when both the VR number
         **and** this item code appear on the same grid row.  Rows where only
@@ -566,6 +752,21 @@ def tick_checkboxes_by_vr(
         the Item Code text for them to be considered on the same grid row.
         Increase this value for grids with taller or inconsistently-sized
         rows.  Default is ``12``.
+    checkbox_y_offset : int
+        Signed vertical adjustment (pixels) applied **on top of** the
+        dynamically detected row-centre Y.  Positive values move the click
+        down; negative values move it up.  Default is ``0`` (no correction).
+        Use this to fine-tune when the checkbox is not exactly at the row
+        centre (e.g. ``-2`` or ``+3`` to account for row padding).
+    debug_screenshots : bool
+        When ``True``, an annotated PNG is saved after each checkbox click
+        attempt.  The image shows the OCR bounding box (green), detected row
+        boundaries (blue), and the final click point (red).  Useful for
+        diagnosing incorrect click coordinates without live access to the
+        machine.  Default is ``False``.
+    debug_dir : str
+        Directory where debug screenshots are saved when *debug_screenshots*
+        is ``True``.  Defaults to the current working directory when empty.
     engine : WindAutomateXEngine | None
         Shared engine instance used for pywinauto window activation.
 
@@ -599,6 +800,11 @@ def tick_checkboxes_by_vr(
         }
 
     logger.info("tick_checkboxes_by_vr: processing %d VR number(s): %s", len(vr_numbers), vr_numbers)
+    if debug_screenshots:
+        logger.info(
+            "tick_checkboxes_by_vr: debug mode ON — annotated screenshots will be saved to '%s'",
+            debug_dir or ".",
+        )
 
     # Activate target window
     _activate_window(window_title, engine)
@@ -625,7 +831,7 @@ def tick_checkboxes_by_vr(
             vr_col_header, item_code_col_header,
         )
 
-    # Detect the checkbox column position once from the initial screenshot.
+    # Detect the checkbox column X position once from the initial screenshot.
     # The checkbox column is the leftmost grid column (before "Vr No" / "DI No").
     # This avoids relying on a fixed pixel offset from the VR text, which can be
     # inaccurate when the VR text is close to the left edge of the ROI.
@@ -682,11 +888,19 @@ def tick_checkboxes_by_vr(
                         vr_col_header=vr_col_header,
                         item_code_col_header=item_code_col_header,
                     )
+                    if bbox is None:
+                        logger.debug(
+                            "%s: VR+item-code pair not found on this scroll page "
+                            "(item_code=%s, row_tolerance=%d)",
+                            vr_number, item_code, row_tolerance,
+                        )
                 else:
                     bbox = _ocr_find_text(
                         screenshot, vr_number,
                         col_header=vr_col_header,
                     )
+                    if bbox is None:
+                        logger.debug("%s: VR text not found on this scroll page", vr_number)
             except ImportError as exc:
                 msg = f"{vr_number}: OCR unavailable — {exc}"
                 logger.error(msg)
@@ -702,36 +916,68 @@ def tick_checkboxes_by_vr(
             if bbox is not None:
                 bx, by, bw, bh = bbox
 
-                # Translate image-relative coords to absolute screen coords.
-                # Prefer the table-structure-detected checkbox column centre
-                # (more reliable than a fixed pixel offset from the VR text).
-                # Fall back to the offset-based approach when the table
-                # structure could not be detected.
                 roi_origin_x = roi[0] if roi is not None else 0
                 roi_origin_y = roi[1] if roi is not None else 0
 
+                # --- X coordinate ---
+                # Prefer the table-structure-detected checkbox column centre;
+                # fall back to the fixed offset from VR text left edge.
                 if checkbox_col_x is not None:
                     screen_x = roi_origin_x + checkbox_col_x
+                    x_method = f"table-detected col x={checkbox_col_x}"
                 else:
                     screen_x = roi_origin_x + bx - checkbox_offset
+                    x_method = f"offset={checkbox_offset} px"
 
-                screen_y = roi_origin_y + by + bh // 2
+                # --- Y coordinate (dynamic row-centre detection) ---
+                # Use horizontal-line detection to find the true row boundaries
+                # and click the row centre.  This is more reliable than the OCR
+                # bbox centre, which can be skewed by multi-line text, row
+                # padding, or OCR bounding-box inconsistencies.
+                ocr_center_y = by + bh // 2  # image-relative OCR bbox centre
+                row_bounds = _detect_row_bounds(screenshot, ocr_center_y)
+
+                if row_bounds is not None:
+                    row_top, row_bottom = row_bounds
+                    img_y = (row_top + row_bottom) // 2 + checkbox_y_offset
+                    y_method = (
+                        f"row-centre (lines top={row_top} bottom={row_bottom})"
+                        + (f" + y_offset={checkbox_y_offset}" if checkbox_y_offset else "")
+                    )
+                else:
+                    img_y = ocr_center_y + checkbox_y_offset
+                    y_method = (
+                        "OCR-bbox-centre (row-line detection failed)"
+                        + (f" + y_offset={checkbox_y_offset}" if checkbox_y_offset else "")
+                    )
+
+                screen_y = roi_origin_y + img_y
                 vr_screen_x = roi_origin_x + bx + bw // 2  # centre of VR text
 
-                # Clamp to a sensible range to avoid accidental off-screen clicks
+                # Clamp to avoid accidental off-screen clicks
                 screen_x = max(0, screen_x)
                 screen_y = max(0, screen_y)
 
-                # Calculate and log the pixel distance from VR text to checkbox
                 distance_px = vr_screen_x - screen_x
                 logger.info(
-                    "%s: VR text centre at x=%d, checkbox click at (%d, %d), "
-                    "distance=%d px (%s)",
-                    vr_number, vr_screen_x, screen_x, screen_y,
+                    "%s: VR text centre at (%d, %d), checkbox click at (%d, %d), "
+                    "x-dist=%d px — x:%s | y:%s",
+                    vr_number,
+                    vr_screen_x, roi_origin_y + ocr_center_y,
+                    screen_x, screen_y,
                     distance_px,
-                    f"table-detected col x={checkbox_col_x}" if checkbox_col_x is not None
-                    else f"offset={checkbox_offset} px",
+                    x_method, y_method,
                 )
+
+                if debug_screenshots:
+                    _save_debug_screenshot(
+                        screenshot, vr_number,
+                        vr_bbox=bbox,
+                        click_xy=(screen_x, screen_y),
+                        row_bounds=row_bounds,
+                        roi=roi,
+                        debug_dir=debug_dir,
+                    )
 
                 try:
                     pyautogui.click(screen_x, screen_y)
