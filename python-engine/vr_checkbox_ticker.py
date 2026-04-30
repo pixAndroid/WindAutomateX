@@ -90,6 +90,75 @@ def _images_are_same(img1, img2, threshold: float = 0.995) -> bool:
     return non_zero_ratio < (1.0 - threshold)
 
 
+def _detect_checkbox_column_x(screenshot) -> Optional[int]:
+    """
+    Detect the x-centre of the checkbox column in *screenshot* using
+    morphological vertical-line detection.
+
+    The checkbox column is the leftmost column in the grid (before the first
+    text column, e.g. "Vr No").  Its position is derived by finding the gap
+    between the first two detected vertical separator lines.
+
+    Returns the x-coordinate (image-relative) of the column centre, or
+    ``None`` when the table structure cannot be reliably determined.
+    """
+    import cv2
+    import numpy as np
+
+    gray = cv2.cvtColor(screenshot, cv2.COLOR_RGB2GRAY) if screenshot.ndim == 3 else screenshot
+    img_h, img_w = gray.shape
+
+    binary = cv2.adaptiveThreshold(
+        gray, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV,
+        blockSize=15, C=4,
+    )
+
+    # Vertical lines: kernel spans at least 20 % of image height so only
+    # genuine full-height column separators survive.
+    v_kernel_h = max(img_h // 5, 15)
+    v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, v_kernel_h))
+    v_lines_img = cv2.morphologyEx(binary, cv2.MORPH_OPEN, v_kernel)
+
+    v_proj = np.sum(v_lines_img, axis=0).astype(np.float32)
+    min_pixels = img_h * 0.20 * 255
+    raw_v = [x for x in range(img_w) if v_proj[x] >= min_pixels]
+
+    if len(raw_v) < 2:
+        return None
+
+    # Group adjacent pixels that belong to the same line
+    groups: list = []
+    current: list = [raw_v[0]]
+    for x in raw_v[1:]:
+        if x - current[-1] <= 6:
+            current.append(x)
+        else:
+            groups.append(int(round(sum(current) / len(current))))
+            current = [x]
+    groups.append(int(round(sum(current) / len(current))))
+
+    if len(groups) < 2:
+        return None
+
+    x_left, x_right = groups[0], groups[1]
+    col_width = x_right - x_left
+    if not (5 <= col_width <= 80):
+        logger.debug(
+            "_detect_checkbox_column_x: first column width %d px outside [5,80] — skipping",
+            col_width,
+        )
+        return None
+
+    cb_x = (x_left + x_right) // 2
+    logger.debug(
+        "_detect_checkbox_column_x: checkbox column x=[%d, %d] center=%d",
+        x_left, x_right, cb_x,
+    )
+    return cb_x
+
+
 # ---------------------------------------------------------------------------
 # OCR helpers
 # ---------------------------------------------------------------------------
@@ -556,6 +625,33 @@ def tick_checkboxes_by_vr(
             vr_col_header, item_code_col_header,
         )
 
+    # Detect the checkbox column position once from the initial screenshot.
+    # The checkbox column is the leftmost grid column (before "Vr No" / "DI No").
+    # This avoids relying on a fixed pixel offset from the VR text, which can be
+    # inaccurate when the VR text is close to the left edge of the ROI.
+    checkbox_col_x: Optional[int] = None
+    try:
+        _init_shot = _capture_roi(roi, pyautogui)
+        checkbox_col_x = _detect_checkbox_column_x(_init_shot)
+        if checkbox_col_x is not None:
+            logger.info(
+                "tick_checkboxes_by_vr: detected checkbox column center at x=%d "
+                "(table structure detection)",
+                checkbox_col_x,
+            )
+        else:
+            logger.info(
+                "tick_checkboxes_by_vr: checkbox column not detected via CV — "
+                "will use offset-based fallback (offset=%d px)",
+                checkbox_offset,
+            )
+    except Exception as _exc:
+        logger.warning(
+            "tick_checkboxes_by_vr: initial checkbox column detection failed (%s) — "
+            "using offset-based fallback",
+            _exc,
+        )
+
     for vr_number in vr_numbers:
         found = False
         prev_screenshot = None
@@ -606,16 +702,21 @@ def tick_checkboxes_by_vr(
             if bbox is not None:
                 bx, by, bw, bh = bbox
 
-                # Translate image-relative coords to absolute screen coords
-                if roi is not None:
-                    rx, ry, _rw, _rh = roi
-                    screen_x = rx + bx - checkbox_offset
-                    screen_y = ry + by + bh // 2
-                    vr_screen_x = rx + bx + bw // 2  # centre of the VR text on screen
+                # Translate image-relative coords to absolute screen coords.
+                # Prefer the table-structure-detected checkbox column centre
+                # (more reliable than a fixed pixel offset from the VR text).
+                # Fall back to the offset-based approach when the table
+                # structure could not be detected.
+                roi_origin_x = roi[0] if roi is not None else 0
+                roi_origin_y = roi[1] if roi is not None else 0
+
+                if checkbox_col_x is not None:
+                    screen_x = roi_origin_x + checkbox_col_x
                 else:
-                    screen_x = bx - checkbox_offset
-                    screen_y = by + bh // 2
-                    vr_screen_x = bx + bw // 2
+                    screen_x = roi_origin_x + bx - checkbox_offset
+
+                screen_y = roi_origin_y + by + bh // 2
+                vr_screen_x = roi_origin_x + bx + bw // 2  # centre of VR text
 
                 # Clamp to a sensible range to avoid accidental off-screen clicks
                 screen_x = max(0, screen_x)
@@ -625,9 +726,11 @@ def tick_checkboxes_by_vr(
                 distance_px = vr_screen_x - screen_x
                 logger.info(
                     "%s: VR text centre at x=%d, checkbox click at (%d, %d), "
-                    "distance=%d px (offset=%d px)",
+                    "distance=%d px (%s)",
                     vr_number, vr_screen_x, screen_x, screen_y,
-                    distance_px, checkbox_offset,
+                    distance_px,
+                    f"table-detected col x={checkbox_col_x}" if checkbox_col_x is not None
+                    else f"offset={checkbox_offset} px",
                 )
 
                 try:

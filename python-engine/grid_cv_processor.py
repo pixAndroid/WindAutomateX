@@ -364,6 +364,159 @@ def _segment_rows_contour(
 
 
 # ---------------------------------------------------------------------------
+# Table structure detection (grid lines → checkbox column + row spans)
+# ---------------------------------------------------------------------------
+
+def _detect_table_structure(
+    screenshot: np.ndarray,
+    min_row_height: int = 8,
+    max_row_height: int = 60,
+) -> tuple[Optional[int], list[tuple[int, int]]]:
+    """
+    Detect the grid table structure using **morphological line detection**.
+
+    Uses an adaptive-threshold binary image and morphological open operations
+    to isolate horizontal and vertical grid lines, then:
+
+    * Derives **row spans** ``(y_top, y_bottom)`` from consecutive horizontal
+      line positions.
+    * Identifies the **checkbox column** as the leftmost column — i.e. the
+      region between the first and second detected vertical lines.
+
+    This is more precise than the projection-profile approach used by
+    :func:`_segment_rows` because it directly reads the grid's own separator
+    lines rather than inferring row boundaries from text density.
+
+    Parameters
+    ----------
+    screenshot : np.ndarray
+        RGB screenshot of the grid region (ROI or full screen).
+    min_row_height, max_row_height : int
+        Valid data-row height range in pixels (rows outside this range are
+        discarded as header artefacts or noise).
+
+    Returns
+    -------
+    (checkbox_col_center_x, row_spans)
+        * ``checkbox_col_center_x`` – x-coordinate (image-relative) of the
+          centre of the checkbox column, or ``None`` when fewer than 2
+          vertical lines are found.
+        * ``row_spans`` – list of ``(y_top, y_bottom)`` tuples.  Falls back
+          to :func:`_segment_rows` output when the table cannot be reliably
+          detected.
+    """
+    import cv2
+
+    gray = cv2.cvtColor(screenshot, cv2.COLOR_RGB2GRAY) if screenshot.ndim == 3 else screenshot
+    img_h, img_w = gray.shape
+
+    # Adaptive threshold highlights both text and separator lines as white
+    binary = cv2.adaptiveThreshold(
+        gray, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV,
+        blockSize=15, C=4,
+    )
+
+    # --- Detect horizontal lines (row separators) ---
+    # Kernel spans at least 25 % of the image width so short artefacts are
+    # ignored and only genuine full-width table borders survive.
+    # A valid horizontal line must cover at least 15 % of image width in the
+    # projection (permissive threshold: line edges that are lighter may not
+    # fully fill 255).
+    h_kernel_w = max(img_w // 4, 40)
+    h_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (h_kernel_w, 1))
+    h_lines_img = cv2.morphologyEx(binary, cv2.MORPH_OPEN, h_kernel)
+
+    # --- Detect vertical lines (column separators) ---
+    # Same approach for the vertical axis: kernel height ≥ 20 % of image height,
+    # projection threshold ≥ 20 % so behaviour is symmetric and consistent with
+    # the standalone _detect_checkbox_column_x helper.
+    v_kernel_h = max(img_h // 5, 15)
+    v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, v_kernel_h))
+    v_lines_img = cv2.morphologyEx(binary, cv2.MORPH_OPEN, v_kernel)
+
+    # --- Project to find pixel coordinates of each line ---
+    h_proj = np.sum(h_lines_img, axis=1).astype(np.float32)
+    v_proj = np.sum(v_lines_img, axis=0).astype(np.float32)
+
+    min_h_pixels = img_w * 0.15 * 255   # horizontal lines: 15 % width coverage
+    min_v_pixels = img_h * 0.20 * 255   # vertical lines:   20 % height coverage
+
+    raw_h = [y for y in range(img_h) if h_proj[y] >= min_h_pixels]
+    raw_v = [x for x in range(img_w) if v_proj[x] >= min_v_pixels]
+
+    def _group(coords: list, gap: int = 6) -> list:
+        """Merge consecutive pixel coordinates that belong to the same line."""
+        if not coords:
+            return []
+        groups: list = []
+        current: list = [coords[0]]
+        for c in coords[1:]:
+            if c - current[-1] <= gap:
+                current.append(c)
+            else:
+                groups.append(int(round(sum(current) / len(current))))
+                current = [c]
+        groups.append(int(round(sum(current) / len(current))))
+        return groups
+
+    h_ys = _group(raw_h, gap=6)
+    v_xs = _group(raw_v, gap=6)
+
+    logger.debug(
+        "_detect_table_structure: %d h-lines at y=%s, %d v-lines at x=%s",
+        len(h_ys), h_ys[:10], len(v_xs), v_xs[:10],
+    )
+
+    # Need at least 2 horizontal lines to form any rows
+    if len(h_ys) < 2:
+        logger.debug(
+            "_detect_table_structure: insufficient horizontal lines (%d) "
+            "— falling back to projection segmentation",
+            len(h_ys),
+        )
+        return None, _segment_rows(screenshot, min_row_height, max_row_height)
+
+    # Build row spans from consecutive horizontal line pairs
+    row_spans: list[tuple[int, int]] = []
+    for i in range(len(h_ys) - 1):
+        y_top, y_bottom = h_ys[i], h_ys[i + 1]
+        row_h = y_bottom - y_top
+        if min_row_height <= row_h <= max_row_height:
+            row_spans.append((y_top, y_bottom))
+
+    if len(row_spans) < 2:
+        logger.debug(
+            "_detect_table_structure: too few valid row spans (%d) "
+            "— falling back to projection segmentation",
+            len(row_spans),
+        )
+        return None, _segment_rows(screenshot, min_row_height, max_row_height)
+
+    # Checkbox column: the leftmost grid column, bounded by the first two
+    # detected vertical lines.  Sanity-check the column width (5–80 px).
+    checkbox_col_center_x: Optional[int] = None
+    if len(v_xs) >= 2:
+        x_left, x_right = v_xs[0], v_xs[1]
+        col_width = x_right - x_left
+        if 5 <= col_width <= 80:
+            checkbox_col_center_x = (x_left + x_right) // 2
+            logger.debug(
+                "_detect_table_structure: checkbox column x=[%d, %d] center=%d",
+                x_left, x_right, checkbox_col_center_x,
+            )
+        else:
+            logger.debug(
+                "_detect_table_structure: first column width %d px is outside "
+                "[5, 80] — skipping checkbox column detection",
+                col_width,
+            )
+
+    return checkbox_col_center_x, row_spans
+
+
+# ---------------------------------------------------------------------------
 # Column header detection
 # ---------------------------------------------------------------------------
 
@@ -717,6 +870,11 @@ def process_grid_cv(config: dict) -> dict:
     item_code_x_range: Optional[tuple[int, int]] = None
     columns_detected = False
 
+    # Detected checkbox column center x (image-relative).  Set once on the
+    # first scroll pass where the table structure can be reliably detected,
+    # then reused for all subsequent passes.
+    checkbox_col_x: Optional[int] = None
+
     # Deduplication: hash of the bottom strip from the previous screenshot,
     # used to detect whether the grid actually moved after a scroll by
     # comparing it against the *top* strip of the new screenshot.
@@ -770,11 +928,24 @@ def process_grid_cv(config: dict) -> dict:
                 )
                 columns_detected = True  # don't retry every iteration
 
-        # ---- 5d. Segment the screenshot into individual rows ----
+        # ---- 5d. Detect table structure: row spans + checkbox column ----
+        # _detect_table_structure uses morphological line detection to find
+        # actual grid separator lines.  The checkbox column x is derived from
+        # the gap between the first two vertical lines (the leftmost column,
+        # which is always the checkbox column in these grids).  The detected
+        # value is cached after the first successful detection and reused for
+        # all subsequent scroll passes.
         try:
-            row_spans = _segment_rows(screenshot)
+            detected_cb_x, row_spans = _detect_table_structure(screenshot)
+            if detected_cb_x is not None and checkbox_col_x is None:
+                checkbox_col_x = detected_cb_x
+                logger.info(
+                    "process_grid_cv: table structure detected — "
+                    "checkbox column center x=%d (scroll %d)",
+                    checkbox_col_x, scroll_count,
+                )
         except Exception as exc:
-            msg = f"Row segmentation failed on scroll {scroll_count}: {exc}"
+            msg = f"Table structure detection failed on scroll {scroll_count}: {exc}"
             logger.warning(msg)
             errors.append(msg)
             # Fall back: treat the entire screenshot as one block
@@ -835,15 +1006,15 @@ def process_grid_cv(config: dict) -> dict:
                     # ---- Click the checkbox ----
                     row_center_y = y_top + (y_bottom - y_top) // 2
 
-                    # X-coordinate: left edge of the row minus cb_offset,
-                    # or left edge of the VR column minus cb_offset
-                    if vr_x_range is not None:
-                        row_left_x = vr_x_range[0]
+                    # X-coordinate: prefer the table-structure-detected
+                    # checkbox column centre (most accurate); fall back to the
+                    # left edge of the VR column minus the configured offset.
+                    if checkbox_col_x is not None:
+                        img_cb_x = checkbox_col_x
+                    elif vr_x_range is not None:
+                        img_cb_x = max(0, vr_x_range[0] - cb_offset)
                     else:
-                        row_left_x = 0
-
-                    # Image-relative checkbox position
-                    img_cb_x = max(0, row_left_x - cb_offset)
+                        img_cb_x = 0
                     img_cb_y = row_center_y
 
                     # Translate to absolute screen coordinates
@@ -861,8 +1032,11 @@ def process_grid_cv(config: dict) -> dict:
 
                     logger.info(
                         "process_grid_cv: match %s — clicking checkbox at (%d, %d) "
-                        "(offset=%d px, scroll=%d)",
-                        pair, screen_cb_x, screen_cb_y, cb_offset, scroll_count,
+                        "(%s, scroll=%d)",
+                        pair, screen_cb_x, screen_cb_y,
+                        f"table-detected x={checkbox_col_x}" if checkbox_col_x is not None
+                        else f"offset={cb_offset} px",
+                        scroll_count,
                     )
 
                     try:
