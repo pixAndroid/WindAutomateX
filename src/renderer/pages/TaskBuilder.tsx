@@ -1297,20 +1297,26 @@ const TaskBuilder: React.FC = () => {
                               </datalist>
                             )}
                           </div>
-                          {/* Item Code — direct input (as-is) */}
+                          {/* Item Code — Pick Column */}
                           <div className="flex gap-2 items-center">
                             <label className="text-xs text-gray-400 w-28 shrink-0">Item Code</label>
                             <input
                               type="text"
+                              list={`excel-cols-vrm-item-code-action-${ai}`}
                               value={String((action as { type: string; value: string; itemCode?: string }).itemCode ?? '')}
                               onChange={(e) => {
                                 const submitActions = [...(editingStep.config.submitActions as { type: string; value: string; [key: string]: unknown }[])];
                                 submitActions[ai] = { ...submitActions[ai], itemCode: e.target.value };
                                 setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
                               }}
-                              placeholder="e.g. MPO010004 (optional)"
+                              placeholder={excelColumns.length > 0 ? 'Pick column…' : 'e.g. MPO010004 (optional)'}
                               className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-cyan-500"
                             />
+                            {excelColumns.length > 0 && (
+                              <datalist id={`excel-cols-vrm-item-code-action-${ai}`}>
+                                {excelColumns.map((col) => <option key={col} value={col} />)}
+                              </datalist>
+                            )}
                           </div>
                           {/* Table Region */}
                           <div className="flex gap-2 items-center">
@@ -1326,6 +1332,29 @@ const TaskBuilder: React.FC = () => {
                               placeholder="x,y,w,h (blank = full screen)"
                               className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-cyan-500"
                             />
+                            <button
+                              onClick={async () => {
+                                const coords = await window.electronAPI.picker.coordinate();
+                                if (coords) {
+                                  const current = String((action as { type: string; value: string; tableRegion?: string }).tableRegion ?? '');
+                                  const parts = current.split(',').map((s) => s.trim());
+                                  const submitActions = [...(editingStep.config.submitActions as { type: string; value: string; [key: string]: unknown }[])];
+                                  if (parts.length >= 2 && parts[0] && parts[1] && !parts[2]) {
+                                    const x1 = parseInt(parts[0], 10);
+                                    const y1 = parseInt(parts[1], 10);
+                                    const w = Math.abs(coords.x - x1);
+                                    const h = Math.abs(coords.y - y1);
+                                    submitActions[ai] = { ...submitActions[ai], tableRegion: `${x1},${y1},${w},${h}` };
+                                  } else {
+                                    submitActions[ai] = { ...submitActions[ai], tableRegion: `${coords.x},${coords.y},` };
+                                  }
+                                  setEditingStep((prev) => prev ? { ...prev, config: { ...prev.config, submitActions } } : null);
+                                }
+                              }}
+                              className="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1.5 rounded-lg text-xs whitespace-nowrap"
+                            >
+                              🎯 Pick
+                            </button>
                           </div>
                           {/* Match Mode */}
                           <div className="flex gap-2 items-center">
