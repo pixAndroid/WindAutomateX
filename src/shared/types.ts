@@ -46,7 +46,8 @@ export type StepType =
   | 'switch_window'
   | 'watch_popup'
   | 'tick_checkboxes_by_vr'
-  | 'vision_row_match';
+  | 'vision_row_match'
+  | 'vision_vr_series_selector';
 
 export interface Run {
   id: number;

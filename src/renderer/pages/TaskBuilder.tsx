@@ -12,6 +12,7 @@ const ACTION_TYPE_COLORS: Record<string, { border: string; label: string }> = {
   delay:      { border: 'border-orange-500', label: 'text-orange-400' },
   tick_vr:    { border: 'border-teal-500',   label: 'text-teal-400'   },
   vision_row_match: { border: 'border-cyan-500', label: 'text-cyan-400' },
+  vision_vr_series_selector: { border: 'border-emerald-500', label: 'text-emerald-400' },
 };
 
 const ALL_STEP_TYPES: StepType[] = [
@@ -21,7 +22,7 @@ const ALL_STEP_TYPES: StepType[] = [
   'download_file', 'wait_download', 'wait_upload', 'read_text',
   'if_condition', 'loop', 'delay', 'screenshot', 'close_app', 'kill_process',
   'excel_form_submit_loop', 'detect_image', 'run_task', 'switch_window', 'watch_popup',
-  'tick_checkboxes_by_vr', 'vision_row_match',
+  'tick_checkboxes_by_vr', 'vision_row_match', 'vision_vr_series_selector',
 ];
 
 const defaultConfig: Record<StepType, Record<string, unknown>> = {
@@ -109,6 +110,21 @@ const defaultConfig: Record<StepType, Record<string, unknown>> = {
     useEasyOcr: false,
     delay: 60,
   },
+  vision_vr_series_selector: {
+    vrSeriesText: '',
+    listRegion: '',
+    scrollEnabled: true,
+    scrollStep: 1,
+    matchMode: 'exact',
+    delayBetweenScroll: 800,
+    scrollX: 0,
+    scrollY: 0,
+    maxScrollAttempts: 20,
+    clickDelay: 100,
+    rowTolerance: 8,
+    useEasyOcr: false,
+    delay: 60,
+  },
 };
 
 interface EditingStep {
@@ -169,6 +185,7 @@ const TaskBuilder: React.FC = () => {
     if (t === 'right_click_coordinate') return 'Right Click Coordinates';
     if (t === 'master_click_coordinate') return 'Master Click Coordinates';
     if (t === 'vision_row_match') return 'Vision Row Match & Select (OCR)';
+    if (t === 'vision_vr_series_selector') return 'Vision Vr Series Selector';
     return t.replace(/_/g, ' ');
   };
 
@@ -2681,6 +2698,240 @@ const TaskBuilder: React.FC = () => {
                       )
                     }
                     className="accent-cyan-500"
+                  />
+                  Use EasyOCR (slower, better for stylised fonts — fallback when pytesseract misreads)
+                </label>
+              </>
+            ) : editingStep.step.step_type === 'vision_vr_series_selector' ? (
+              <>
+                <p className="text-xs text-gray-400 bg-gray-750 border border-emerald-700 rounded-lg px-3 py-2">
+                  🔎 <strong className="text-white">Vision Vr Series Selector</strong> uses Computer Vision + OCR to
+                  scan a Vr Series dropdown list on screen. It finds the entry matching the specified Vr Series text,
+                  clicks directly on it, and auto-scrolls using Page Down until the match is found or the list ends.
+                </p>
+
+                {/* Vr Series Text */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Vr Series Text <span className="text-red-400">*</span></label>
+                  <input
+                    type="text"
+                    value={String(editingStep.config.vrSeriesText ?? '')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, vrSeriesText: e.target.value } } : null
+                      )
+                    }
+                    placeholder="e.g. E1 or Grn For Floating Solar"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    The Vr Series entry to find in the list (e.g. <code className="text-gray-400">E1</code> or a
+                    partial description). The row containing this text will be clicked.
+                  </p>
+                </div>
+
+                {/* List Region */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">List Region (x, y, width, height)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={String(editingStep.config.listRegion ?? '')}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, listRegion: e.target.value } } : null
+                        )
+                      }
+                      placeholder="e.g. 100,200,600,400"
+                      className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      onClick={async () => {
+                        const coords = await window.electronAPI.picker.coordinate();
+                        if (coords) {
+                          const current = String(editingStep?.config.listRegion ?? '');
+                          const parts = current.split(',').map((s) => s.trim());
+                          if (parts.length >= 2 && parts[0] && parts[1] && !parts[2]) {
+                            const x1 = parseInt(parts[0], 10);
+                            const y1 = parseInt(parts[1], 10);
+                            const w = Math.abs(coords.x - x1);
+                            const h = Math.abs(coords.y - y1);
+                            setEditingStep((prev) =>
+                              prev
+                                ? { ...prev, config: { ...prev.config, listRegion: `${x1},${y1},${w},${h}` } }
+                                : null
+                            );
+                          } else {
+                            setEditingStep((prev) =>
+                              prev
+                                ? { ...prev, config: { ...prev.config, listRegion: `${coords.x},${coords.y},` } }
+                                : null
+                            );
+                          }
+                        }
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap"
+                    >
+                      🎯 Pick
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Screen region of the Vr Series dropdown list. Click 🎯 once for the top-left corner, then again for the
+                    bottom-right. Leave blank for full screen.
+                  </p>
+                </div>
+
+                {/* Match Mode */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Match Mode</label>
+                  <select
+                    value={String(editingStep.config.matchMode ?? 'exact')}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, matchMode: e.target.value } } : null
+                      )
+                    }
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="exact">Exact</option>
+                    <option value="contains">Contains (substring match)</option>
+                    <option value="fuzzy">Fuzzy (Levenshtein — handles OCR misreads)</option>
+                  </select>
+                </div>
+
+                {/* Scroll Settings */}
+                <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider pt-1">Scroll Settings</p>
+                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingStep.config.scrollEnabled ?? true)}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, scrollEnabled: e.target.checked } } : null
+                      )
+                    }
+                    className="accent-emerald-500"
+                  />
+                  Enable Auto-Scroll (Page Down)
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Page Downs per Scroll</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={String(editingStep.config.scrollStep ?? 1)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, scrollStep: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Delay Between Scrolls (ms)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={String(editingStep.config.delayBetweenScroll ?? 800)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, delayBetweenScroll: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Scroll X</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.scrollX ?? 0)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, scrollX: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Scroll Y</label>
+                    <input
+                      type="number"
+                      value={String(editingStep.config.scrollY ?? 0)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, scrollY: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Max Scroll Attempts</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={String(editingStep.config.maxScrollAttempts ?? 20)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, maxScrollAttempts: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Click Delay (ms)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={String(editingStep.config.clickDelay ?? 100)}
+                      onChange={(e) =>
+                        setEditingStep((prev) =>
+                          prev ? { ...prev, config: { ...prev.config, clickDelay: Number(e.target.value) } } : null
+                        )
+                      }
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Scroll X/Y: screen coordinate clicked to give the list keyboard focus before pressing Page Down.
+                  Leave at 0,0 to auto-centre on the list region.
+                </p>
+
+                {/* OCR Settings */}
+                <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider pt-1">OCR Settings</p>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Row Tolerance (px)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={String(editingStep.config.rowTolerance ?? 8)}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, rowTolerance: Number(e.target.value) } } : null
+                      )
+                    }
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-emerald-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maximum Y-centre difference (px) for two OCR words to be grouped on the same row.
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingStep.config.useEasyOcr)}
+                    onChange={(e) =>
+                      setEditingStep((prev) =>
+                        prev ? { ...prev, config: { ...prev.config, useEasyOcr: e.target.checked } } : null
+                      )
+                    }
+                    className="accent-emerald-500"
                   />
                   Use EasyOCR (slower, better for stylised fonts — fallback when pytesseract misreads)
                 </label>

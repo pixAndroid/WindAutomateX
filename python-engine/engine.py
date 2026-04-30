@@ -90,6 +90,7 @@ class WindAutomateXEngine:
             "tick_checkboxes_by_vr": self._tick_checkboxes_by_vr,
             "process_grid_cv": self._process_grid_cv,
             "vision_row_match": self._vision_row_match,
+            "vision_vr_series_selector": self._vision_vr_series_selector,
         }
 
         handler = handlers.get(step_type)
@@ -948,4 +949,67 @@ class WindAutomateXEngine:
         }
 
         result = run_vision_match(vision_config, engine=self)
+        return {"success": result.get("success", False), "message": result.get("message", "")}
+
+    def _vision_vr_series_selector(self, config: dict) -> dict:
+        """
+        Computer Vision + OCR based Vr Series dropdown selector.
+
+        Opens the on-screen Vr Series list, scans it with OCR, finds the row
+        matching the supplied Vr Series text, clicks directly on it, and
+        auto-scrolls using Page Down until the entry is found or the list ends.
+
+        Config keys
+        -----------
+        vrSeriesText        (str)   – Vr Series text to match.  Required.
+        listRegion          (dict)  – {x, y, width, height} of the list region.
+                                      Blank = full screen.
+        scrollEnabled       (bool)  – Whether to scroll. Default True.
+        scrollStep          (int)   – Number of Page Down presses per scroll.
+                                      Default 1.
+        matchMode           (str)   – "exact", "contains", or "fuzzy".
+                                      Default "exact".
+        delayBetweenScroll  (int)   – ms to wait after each scroll. Default 800.
+        scrollX             (int)   – X coordinate for scroll focus click.
+        scrollY             (int)   – Y coordinate for scroll focus click.
+        maxScrollAttempts   (int)   – Scroll-attempt cap. Default 20.
+        clickDelay          (int)   – ms after the click. Default 100.
+        rowTolerance        (int)   – Y-centre tolerance for row grouping.
+                                      Default 8.
+        useEasyOcr          (bool)  – Use EasyOCR instead of pytesseract.
+                                      Default False.
+        """
+        from vision_vr_series_selector import run_vr_series_selector
+
+        # listRegion: accept both dict and "x,y,w,h" string
+        list_region = config.get("listRegion")
+        if isinstance(list_region, str) and list_region.strip():
+            parts = [p.strip() for p in list_region.split(",")]
+            if len(parts) == 4:
+                try:
+                    list_region = {
+                        "x": int(parts[0]),
+                        "y": int(parts[1]),
+                        "width": int(parts[2]),
+                        "height": int(parts[3]),
+                    }
+                except ValueError:
+                    list_region = None
+
+        selector_config = {
+            "vrSeriesText": str(config.get("vrSeriesText", "")).strip(),
+            "listRegion": list_region,
+            "scrollEnabled": bool(config.get("scrollEnabled", True)),
+            "scrollStep": int(config.get("scrollStep", 1)),
+            "matchMode": str(config.get("matchMode", "exact")),
+            "delayBetweenScroll": int(config.get("delayBetweenScroll", 800)),
+            "scrollX": int(config.get("scrollX", 0)),
+            "scrollY": int(config.get("scrollY", 0)),
+            "maxScrollAttempts": int(config.get("maxScrollAttempts", 20)),
+            "clickDelay": int(config.get("clickDelay", 100)),
+            "rowTolerance": int(config.get("rowTolerance", 8)),
+            "useEasyOcr": bool(config.get("useEasyOcr", False)),
+        }
+
+        result = run_vr_series_selector(selector_config, engine=self)
         return {"success": result.get("success", False), "message": result.get("message", "")}
